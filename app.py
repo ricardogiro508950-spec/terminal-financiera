@@ -6,12 +6,18 @@ import yfinance as yf
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v3.1", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v4.0", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v3.1")
-st.caption("Panel Avanzado | Aprendizaje Integrado y Auditoría de Capital")
+st.title("📊 Terminal Financiera Institucional v4.0")
+st.caption("Panel Avanzado | Aprendizaje, Auditoría y Gestión de Portafolio en Vivo")
 st.markdown("---")
+
+# ==========================================
+# INICIALIZAR MEMORIA DEL PORTAFOLIO
+# ==========================================
+if 'trades' not in st.session_state:
+    st.session_state.trades = pd.DataFrame(columns=["Activo", "Tipo", "Cantidad", "Precio_Entrada", "Inversion_Inicial_USD"])
 
 # ==========================================
 # FUNCIONES MATEMÁTICAS Y DE DATOS
@@ -76,10 +82,6 @@ st.sidebar.caption("Regla institucional: Nunca comprometas liquidez sin medir el
 # ==========================================
 st.subheader("🌐 Panel Intermercados y Macroeconomía")
 
-with st.expander("🎓 ¿Cómo interpretar la Macroeconomía? (Haz clic para leer)"):
-    st.write("- **Índice Dólar (DXY):** Si sube, encarece el capital global y hace caer al Bitcoin. Si baja, empuja los precios al alza.")
-    st.write("- **Bonos (US10Y):** Reflejan el costo de financiarse. Tasas altas son malas para el riesgo.")
-
 col1, col2, col3, col4 = st.columns(4)
 
 btc_info = market_data.get("Bitcoin", {"price": 0, "change": 0})
@@ -123,7 +125,7 @@ if asset_choice in market_history:
     t_col2.metric("EMA 50", f"${current_ema50:,.2f}")
     t_col3.metric("EMA 200", f"${current_ema200:,.2f}")
 
-    # Gráfico de Velas con Plotly
+    # Gráfico
     fig = go.Figure()
     fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
     fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
@@ -135,62 +137,127 @@ if asset_choice in market_history:
 st.markdown("---")
 
 # ==========================================
-# 3. TRADUCTOR DEL MERCADO EN VIVO (NUEVO)
+# 3. TRADUCTOR DEL MERCADO EN VIVO
 # ==========================================
 st.subheader("📝 Traductor del Mercado en Vivo")
-st.write("¿Qué significan los números de arriba en este exacto momento?")
 
-# Traducción del Dólar
 dxy_change = dxy_info["change"]
 if dxy_change < 0:
-    st.markdown(f"*   🟢 **El Viento a Favor (Macro):** El Índice Dólar está cayendo (`{dxy_change:.2f}%`). Esto es **BUENO**. Inyecta liquidez y facilita que activos como Bitcoin y Oro suban de precio.")
+    st.markdown(f"*   🟢 **El Viento a Favor (Macro):** El Índice Dólar cae (`{dxy_change:.2f}%`). **BUENO**. Inyecta liquidez a los activos de riesgo.")
 else:
-    st.markdown(f"*   🔴 **El Viento en Contra (Macro):** El Índice Dólar está subiendo (`+{dxy_change:.2f}%`). Esto es **MALO**. Encarece el capital y asfixia a los activos de riesgo.")
+    st.markdown(f"*   🔴 **El Viento en Contra (Macro):** El Índice Dólar sube (`+{dxy_change:.2f}%`). **MALO**. Encarece el capital.")
 
-# Traducción de los Bonos
 bond_change = bond_info["change"]
 if bond_change < 0:
-    st.markdown(f"*   🟢 **Tasas de Interés:** El Bono a 10 Años cae (`{bond_change:.2f}%`). **BUENO**. El dinero seguro rinde menos, lo que empuja a los grandes inversores a comprar cripto.")
+    st.markdown(f"*   🟢 **Tasas de Interés:** El Bono a 10 Años cae (`{bond_change:.2f}%`). **BUENO** para los activos especulativos.")
 else:
-    st.markdown(f"*   🔴 **Tasas de Interés:** El Bono a 10 Años sube (`+{bond_change:.2f}%`). **MALO**. Hay presión en el mercado porque el dinero seguro está pagando bien sin riesgo.")
+    st.markdown(f"*   🔴 **Tasas de Interés:** El Bono a 10 Años sube (`+{bond_change:.2f}%`). **MALO** para el riesgo.")
 
-# Traducción del RSI
 if current_rsi > 70:
-    st.markdown(f"*   🔴 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **PELIGRO**. El activo está sobrecomprado, la gente está eufórica y es muy probable una caída brusca.")
+    st.markdown(f"*   🔴 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **PELIGRO**. Sobrecomprado, posible corrección.")
 elif current_rsi < 30:
-    st.markdown(f"*   🟢 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **OPORTUNIDAD**. El activo está sobrevendido por pánico extremo. Podría rebotar pronto.")
+    st.markdown(f"*   🟢 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **OPORTUNIDAD**. Sobrevendido, posible rebote.")
 else:
-    st.markdown(f"*   🟡 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **SANO**. Está subiendo/bajando de forma orgánica, sin euforia ni desesperación extrema.")
+    st.markdown(f"*   🟡 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **SANO**. Subiendo o bajando de forma orgánica.")
 
-# Traducción de la Batalla Técnica (Precio vs EMA 50)
 if current_close > current_ema50:
-    st.markdown(f"*   🟢 **La Batalla en las Trincheras:** El precio (`${current_close:,.2f}`) ha superado la línea naranja EMA 50 (`${current_ema50:,.2f}`). **BUENO**. Demuestra fuerza alcista a corto plazo.")
+    st.markdown(f"*   🟢 **Batalla Técnica:** Precio arriba de la EMA 50. **BUENO**. Fuerza alcista.")
 else:
-    st.markdown(f"*   🔴 **La Batalla en las Trincheras:** El precio (`${current_close:,.2f}`) está atrapado debajo de la línea naranja EMA 50 (`${current_ema50:,.2f}`). **PRECAUCIÓN**. La línea naranja funciona como un 'techo' de concreto que aún no puede romper.")
+    st.markdown(f"*   🔴 **Batalla Técnica:** Precio atrapado debajo de la EMA 50. **PRECAUCIÓN**. Resistencia activa.")
 
 st.markdown("---")
 
 # ==========================================
 # 4. ALGORITMO DE DECISIÓN (EL VEREDICTO)
 # ==========================================
-st.subheader("🧠 Algoritmo de Confluencia (El Veredicto Final)")
+st.subheader("🧠 Algoritmo de Confluencia")
 
 score = 0
 if current_close > current_ema50: score += 1
 else: score -= 1
-
 if 40 <= current_rsi <= 60: score += 1
 elif current_rsi > 70: score -= 1
 elif current_rsi < 30: score += 1
-
 if dxy_change < 0: score += 1
 else: score -= 1
 
-st.markdown(f"**Puntuación:** `{score}/3`")
-
 if score >= 2:
-    st.success("🟢 **ESTADO VERDE:** Semáforo en verde. Tienes probabilidades estadísticas a tu favor. Si decides operar, revisa tu 'Compra Máxima Permitida' en la barra lateral.")
+    st.success("🟢 **ESTADO VERDE:** Probabilidades a favor. Mercado propicio.")
 elif score == 1:
-    st.warning("🟡 **ESTADO AMARILLO:** Señales divididas (mercado dudoso). Mejor esperar a que haya más fuerza o mantener el capital seguro en dólares (USDT).")
+    st.warning("🟡 **ESTADO AMARILLO:** Señales divididas. Mercado dudoso, mantén liquidez.")
 else:
-    st.error("🔴 **ESTADO ROJO:** Riesgo extremo. Probabilidades en contra. Prohibido comprar. Priorizar la defensa del balance general.")
+    st.error("🔴 **ESTADO ROJO:** Riesgo extremo. Probabilidades en contra. No operar.")
+
+st.markdown("---")
+
+# ==========================================
+# 5. BITÁCORA DE OPERACIONES Y PORTAFOLIO EN VIVO
+# ==========================================
+st.subheader("💼 Mi Portafolio y Bitácora de Trading")
+st.write("Registra tus compras aquí. El sistema cruzará tus datos con el mercado en vivo para calcular tus ganancias o pérdidas reales.")
+
+# Formulario para registrar una nueva operación
+with st.form("registro_operacion", clear_on_submit=True):
+    col_a, col_b, col_c, col_d = st.columns(4)
+    with col_a:
+        nuevo_activo = st.selectbox("Activo", ["Bitcoin", "Oro"])
+    with col_b:
+        nuevo_tipo = st.selectbox("Tipo", ["Compra"]) # Simplificado a compras por ahora
+    with col_c:
+        nueva_cantidad = st.number_input("Cantidad de monedas/onzas", min_value=0.00001, format="%.5f")
+    with col_d:
+        precio_actual = btc_info['price'] if nuevo_activo == "Bitcoin" else gold_info['price']
+        nuevo_precio = st.number_input("Precio de Compra (USD)", value=float(precio_actual), min_value=0.1)
+    
+    submit_trade = st.form_submit_button("➕ Registrar Operación")
+    
+    if submit_trade and nueva_cantidad > 0:
+        inversion = nueva_cantidad * nuevo_precio
+        nueva_fila = pd.DataFrame([{
+            "Activo": nuevo_activo, 
+            "Tipo": nuevo_tipo, 
+            "Cantidad": nueva_cantidad, 
+            "Precio_Entrada": nuevo_precio, 
+            "Inversion_Inicial_USD": inversion
+        }])
+        st.session_state.trades = pd.concat([st.session_state.trades, nueva_fila], ignore_index=True)
+        st.success(f"✅ Operación registrada: Compraste {nueva_cantidad} de {nuevo_activo} por ${inversion:.2f} USD.")
+
+# Mostrar Estadísticas del Portafolio si hay operaciones
+if not st.session_state.trades.empty:
+    df_trades = st.session_state.trades.copy()
+    
+    # Calcular precios actuales cruzando con datos en vivo
+    precios_actuales = {"Bitcoin": btc_info['price'], "Oro": gold_info['price']}
+    df_trades['Precio_Actual_Mercado'] = df_trades['Activo'].map(precios_actuales)
+    
+    # Calcular valorizaciones
+    df_trades['Valor_Actual_USD'] = df_trades['Cantidad'] * df_trades['Precio_Actual_Mercado']
+    df_trades['Ganancia/Perdida_USD'] = df_trades['Valor_Actual_USD'] - df_trades['Inversion_Inicial_USD']
+    df_trades['Rendimiento_%'] = (df_trades['Ganancia/Perdida_USD'] / df_trades['Inversion_Inicial_USD']) * 100
+    
+    # Resumen Total
+    inversion_total = df_trades['Inversion_Inicial_USD'].sum()
+    valor_actual_total = df_trades['Valor_Actual_USD'].sum()
+    ganancia_neta = valor_actual_total - inversion_total
+    rendimiento_total = (ganancia_neta / inversion_total) * 100 if inversion_total > 0 else 0
+    
+    st.markdown("### 📊 Rendimiento de mi Portafolio")
+    res_col1, res_col2, res_col3 = st.columns(3)
+    res_col1.metric("Inversión Total (USD)", f"${inversion_total:,.2f}")
+    res_col2.metric("Valor Actual (USD)", f"${valor_actual_total:,.2f}", f"{ganancia_neta:,.2f} USD")
+    res_col3.metric("Rendimiento Neto (%)", f"{rendimiento_total:.2f}%")
+    
+    st.markdown("**Historial de Transacciones Cruzadas con el Mercado:**")
+    st.dataframe(df_trades.style.format({
+        "Cantidad": "{:.5f}",
+        "Precio_Entrada": "${:,.2f}",
+        "Inversion_Inicial_USD": "${:,.2f}",
+        "Precio_Actual_Mercado": "${:,.2f}",
+        "Valor_Actual_USD": "${:,.2f}",
+        "Ganancia/Perdida_USD": "${:,.2f}",
+        "Rendimiento_%": "{:.2f}%"
+    }), use_container_width=True)
+
+else:
+    st.info("No tienes operaciones registradas. Ingresa una compra en el formulario de arriba para iniciar la simulación en vivo.")
