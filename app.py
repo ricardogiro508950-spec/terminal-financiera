@@ -1,5 +1,4 @@
 import streamlit as st
-import requests
 import yfinance as yf
 
 # Configuración de la página (Adaptada para celular)
@@ -10,26 +9,29 @@ st.caption("Panel de Control Patrimonial | v1.0")
 st.markdown("---")
 
 # ==========================================
-# MOTOR 1: CRIPTOMONEDAS (BINANCE API)
+# MOTOR 1: CRIPTOMONEDAS (YFINANCE BTC-USD)
 # ==========================================
 st.subheader("🪙 Motor Cripto (Riesgo/Crecimiento)")
 try:
-    url_binance = "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"
-    res_binance = requests.get(url_binance, timeout=5).json()
+    btc = yf.Ticker("BTC-USD")
+    btc_data = btc.history(period="2d")
     
-    btc_price = float(res_binance['lastPrice'])
-    btc_change = float(res_binance['priceChangePercent'])
-    btc_vol = float(res_binance['volume'])
-    
+    if len(btc_data) >= 2:
+        btc_price = btc_data['Close'].iloc[-1]
+        btc_prev = btc_data['Close'].iloc[-2]
+        btc_change = ((btc_price - btc_prev) / btc_prev) * 100
+    else:
+        btc_price = btc_data['Close'].iloc[-1]
+        btc_change = 0.0
+        
     col1, col2 = st.columns(2)
-    col1.metric(label="Bitcoin (BTC/USDT)", value=f"${btc_price:,.2f}", delta=f"{btc_change:.2f}%")
-    col2.metric(label="Volumen 24h", value=f"{btc_vol:,.0f} BTC", delta="Liquidez")
+    col1.metric(label="Bitcoin (BTC/USD)", value=f"${btc_price:,.2f}", delta=f"{btc_change:.2f}%")
+    col2.metric(label="Estado", value="Conectado", delta="Tiempo Real", delta_color="off")
     
 except Exception as e:
-    st.error("Error conectando a Binance (Tiempo de espera agotado).")
     col1, col2 = st.columns(2)
-    col1.metric(label="Bitcoin (BTC/USDT)", value="$0.00", delta="0.00%")
-    col2.metric(label="Volumen 24h", value="0 BTC", delta="Sin conexión")
+    col1.metric(label="Bitcoin (BTC/USD)", value="$0.00", delta="0.00%")
+    col2.metric(label="Estado", value="Reintentando", delta="Offline", delta_color="off")
 
 st.markdown("---")
 
@@ -54,7 +56,6 @@ try:
     col4.metric(label="Tendencia", value="Monitoreando", delta="Refugio Global", delta_color="off")
     
 except Exception as e:
-    st.error("Error conectando al mercado de materias primas.")
     col3, col4 = st.columns(2)
     col3.metric(label="Oro (XAU/USD - Onza)", value="$0.00", delta="0.00%")
     col4.metric(label="Tendencia", value="Desconectado", delta="Offline", delta_color="off")
