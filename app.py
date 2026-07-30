@@ -6,10 +6,10 @@ import yfinance as yf
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v3.0", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v3.1", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v3.0")
+st.title("📊 Terminal Financiera Institucional v3.1")
 st.caption("Panel Avanzado | Aprendizaje Integrado y Auditoría de Capital")
 st.markdown("---")
 
@@ -59,18 +59,17 @@ market_data, market_history = load_data()
 st.sidebar.header("🛡️ Auditoría de Capital")
 st.sidebar.write("Calcula tu exposición exacta antes de operar.")
 
-capital = st.sidebar.number_input("Capital Total Disponible (USD)", min_value=10.0, value=1000.0, step=100.0, help="El patrimonio total de tu cuenta.")
-riesgo_pct = st.sidebar.slider("Riesgo por Operación (%)", 0.5, 5.0, 1.0, 0.5, help="Regla de oro: No arriesgar más del 1% al 2% por operación para preservar liquidez.")
-stop_loss_pct = st.sidebar.number_input("Stop-Loss: Distancia de pérdida (%)", min_value=0.1, value=5.0, step=0.5, help="Si el mercado cae este porcentaje, asumes la pérdida y te retiras.")
+capital = st.sidebar.number_input("Capital Total Disponible (USD)", min_value=10.0, value=1000.0, step=100.0)
+riesgo_pct = st.sidebar.slider("Riesgo por Operación (%)", 0.5, 5.0, 1.0, 0.5)
+stop_loss_pct = st.sidebar.number_input("Stop-Loss: Distancia de pérdida (%)", min_value=0.1, value=5.0, step=0.5)
 
-# Cálculos financieros corporativos
 riesgo_usd = capital * (riesgo_pct / 100)
-tamano_posicion = riesgo_usd / (stop_loss_pct / 100)
+tamano_posicion = riesgo_usd / (stop_loss_pct / 100) if stop_loss_pct > 0 else 0
 
-st.sidebar.markdown("### 📊 Flujo de Caja Proyectado (Trade)")
+st.sidebar.markdown("### 📊 Flujo de Caja Proyectado")
 st.sidebar.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
 st.sidebar.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} USD")
-st.sidebar.caption("Al igual que en un balance general, nunca comprometas liquidez sin medir el impacto de una pérdida en el patrimonio total.")
+st.sidebar.caption("Regla institucional: Nunca comprometas liquidez sin medir el impacto de una pérdida en el patrimonio total.")
 
 # ==========================================
 # 1. PANEL MACROECONÓMICO
@@ -78,8 +77,8 @@ st.sidebar.caption("Al igual que en un balance general, nunca comprometas liquid
 st.subheader("🌐 Panel Intermercados y Macroeconomía")
 
 with st.expander("🎓 ¿Cómo interpretar la Macroeconomía? (Haz clic para leer)"):
-    st.write("- **Índice Dólar (DXY):** Actúa como un pasivo pesado. Si sube, encarece el capital global y hace caer al Bitcoin y al Oro. Si baja, da alivio y empuja los precios al alza.")
-    st.write("- **Bonos (US10Y):** Reflejan el costo de financiarse. Si las tasas superan el 4.5%, hay presión en el mercado porque el dinero seguro rinde bien sin necesidad de arriesgar en cripto.")
+    st.write("- **Índice Dólar (DXY):** Si sube, encarece el capital global y hace caer al Bitcoin. Si baja, empuja los precios al alza.")
+    st.write("- **Bonos (US10Y):** Reflejan el costo de financiarse. Tasas altas son malas para el riesgo.")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -88,10 +87,10 @@ gold_info = market_data.get("Oro", {"price": 0, "change": 0})
 dxy_info = market_data.get("DXY (Dólar)", {"price": 0, "change": 0})
 bond_info = market_data.get("Bonos 10Y", {"price": 0, "change": 0})
 
-col1.metric("Bitcoin (BTC/USD)", f"${btc_info['price']:,.2f}", f"{btc_info['change']:.2f}%", help="El activo de mayor riesgo y crecimiento.")
-col2.metric("Oro (XAU/USD)", f"${gold_info['price']:,.2f}", f"{gold_info['change']:.2f}%", help="Cobertura histórica contra inflación.")
-col3.metric("Índice Dólar (DXY)", f"{dxy_info['price']:,.2f}", f"{dxy_info['change']:.2f}%", help="Fuerza del billete verde frente al mundo.")
-col4.metric("Bono 10 Años (US10Y)", f"{bond_info['price']:,.2f}", f"{bond_info['change']:.2f}%", help="Tasa de rendimiento libre de riesgo.")
+col1.metric("Bitcoin (BTC/USD)", f"${btc_info['price']:,.2f}", f"{btc_info['change']:.2f}%")
+col2.metric("Oro (XAU/USD)", f"${gold_info['price']:,.2f}", f"{gold_info['change']:.2f}%")
+col3.metric("Índice Dólar (DXY)", f"{dxy_info['price']:,.2f}", f"{dxy_info['change']:.2f}%")
+col4.metric("Bono 10 Años (US10Y)", f"{bond_info['price']:,.2f}", f"{bond_info['change']:.2f}%")
 
 st.markdown("---")
 
@@ -100,12 +99,12 @@ st.markdown("---")
 # ==========================================
 st.subheader("📈 Análisis Cuantitativo & Gráficos Interactivos")
 
-with st.expander("🎓 ¿Cómo leer el Gráfico y los Indicadores?"):
-    st.write("- **EMA 200 (Línea Azul):** Es la auditoría de largo plazo. Si el precio está arriba, es territorio de compras (tendencia alcista). Si está abajo, los institucionales están vendiendo (bajista).")
-    st.write("- **EMA 50 (Línea Naranja):** Marca el ritmo de mediano plazo.")
-    st.write("- **RSI:** Es como el flujo de caja del mercado. Mayor a 70 = Sobrecomprado (caro, a punto de caer). Menor a 30 = Sobrevendido (barato, posible rebote).")
-
 asset_choice = st.selectbox("Seleccione activo para análisis técnico detallado:", ["Bitcoin", "Oro"])
+
+current_close = 0
+current_ema50 = 0
+current_ema200 = 0
+current_rsi = 50
 
 if asset_choice in market_history:
     df_asset = market_history[asset_choice].copy()
@@ -136,54 +135,62 @@ if asset_choice in market_history:
 st.markdown("---")
 
 # ==========================================
-# 3. ALGORITMO DE DECISIÓN (EL VEREDICTO)
+# 3. TRADUCTOR DEL MERCADO EN VIVO (NUEVO)
 # ==========================================
-st.subheader("🧠 Algoritmo de Confluencia (El Veredicto)")
+st.subheader("📝 Traductor del Mercado en Vivo")
+st.write("¿Qué significan los números de arriba en este exacto momento?")
 
-with st.expander("🎓 ¿Cómo usar este Veredicto?"):
-    st.write("El algoritmo suma los factores técnicos y macroeconómicos. No es una orden de compra infalible, es un **cálculo de probabilidad estadística**. Úsalo como semáforo para autorizar o denegar el uso de tu liquidez calculada en la barra lateral.")
-
-score = 0
-reasons = []
-
-if "Bitcoin" in market_history and len(market_history["Bitcoin"]) > 0:
-    btc_df = market_history["Bitcoin"]
-    btc_close = btc_df["Close"].iloc[-1]
-    ema_50_val = btc_df["Close"].ewm(span=50, adjust=False).mean().iloc[-1]
-    rsi_val = calculate_rsi(btc_df["Close"]).iloc[-1]
-
-    if btc_close > ema_50_val:
-        score += 1
-        reasons.append("✔ Precio sobre la EMA de 50 (Estructura favorable)")
-    else:
-        score -= 1
-        reasons.append("✖ Precio bajo la EMA de 50 (Estructura débil)")
-
-    if 40 <= rsi_val <= 60:
-        score += 1
-        reasons.append("✔ RSI en rango neutral (Saludable)")
-    elif rsi_val > 70:
-        score -= 1
-        reasons.append("⚠ RSI Sobrecomprado (Riesgo de caída)")
-    elif rsi_val < 30:
-        score += 1
-        reasons.append("✔ RSI Sobrevendido (Posible oportunidad)")
-
+# Traducción del Dólar
 dxy_change = dxy_info["change"]
 if dxy_change < 0:
-    score += 1
-    reasons.append("✔ Dólar a la baja (Macro a favor)")
+    st.markdown(f"*   🟢 **El Viento a Favor (Macro):** El Índice Dólar está cayendo (`{dxy_change:.2f}%`). Esto es **BUENO**. Inyecta liquidez y facilita que activos como Bitcoin y Oro suban de precio.")
 else:
-    score -= 1
-    reasons.append("✖ Dólar al alza (Macro en contra)")
+    st.markdown(f"*   🔴 **El Viento en Contra (Macro):** El Índice Dólar está subiendo (`+{dxy_change:.2f}%`). Esto es **MALO**. Encarece el capital y asfixia a los activos de riesgo.")
+
+# Traducción de los Bonos
+bond_change = bond_info["change"]
+if bond_change < 0:
+    st.markdown(f"*   🟢 **Tasas de Interés:** El Bono a 10 Años cae (`{bond_change:.2f}%`). **BUENO**. El dinero seguro rinde menos, lo que empuja a los grandes inversores a comprar cripto.")
+else:
+    st.markdown(f"*   🔴 **Tasas de Interés:** El Bono a 10 Años sube (`+{bond_change:.2f}%`). **MALO**. Hay presión en el mercado porque el dinero seguro está pagando bien sin riesgo.")
+
+# Traducción del RSI
+if current_rsi > 70:
+    st.markdown(f"*   🔴 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **PELIGRO**. El activo está sobrecomprado, la gente está eufórica y es muy probable una caída brusca.")
+elif current_rsi < 30:
+    st.markdown(f"*   🟢 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **OPORTUNIDAD**. El activo está sobrevendido por pánico extremo. Podría rebotar pronto.")
+else:
+    st.markdown(f"*   🟡 **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. **SANO**. Está subiendo/bajando de forma orgánica, sin euforia ni desesperación extrema.")
+
+# Traducción de la Batalla Técnica (Precio vs EMA 50)
+if current_close > current_ema50:
+    st.markdown(f"*   🟢 **La Batalla en las Trincheras:** El precio (`${current_close:,.2f}`) ha superado la línea naranja EMA 50 (`${current_ema50:,.2f}`). **BUENO**. Demuestra fuerza alcista a corto plazo.")
+else:
+    st.markdown(f"*   🔴 **La Batalla en las Trincheras:** El precio (`${current_close:,.2f}`) está atrapado debajo de la línea naranja EMA 50 (`${current_ema50:,.2f}`). **PRECAUCIÓN**. La línea naranja funciona como un 'techo' de concreto que aún no puede romper.")
+
+st.markdown("---")
+
+# ==========================================
+# 4. ALGORITMO DE DECISIÓN (EL VEREDICTO)
+# ==========================================
+st.subheader("🧠 Algoritmo de Confluencia (El Veredicto Final)")
+
+score = 0
+if current_close > current_ema50: score += 1
+else: score -= 1
+
+if 40 <= current_rsi <= 60: score += 1
+elif current_rsi > 70: score -= 1
+elif current_rsi < 30: score += 1
+
+if dxy_change < 0: score += 1
+else: score -= 1
 
 st.markdown(f"**Puntuación:** `{score}/3`")
-for r in reasons:
-    st.write(r)
 
 if score >= 2:
-    st.success("🟢 **ESTADO VERDE:** Probabilidad a favor. Revisa la barra lateral para calcular tu posición y autorizar despliegue de capital.")
+    st.success("🟢 **ESTADO VERDE:** Semáforo en verde. Tienes probabilidades estadísticas a tu favor. Si decides operar, revisa tu 'Compra Máxima Permitida' en la barra lateral.")
 elif score == 1:
-    st.warning("🟡 **ESTADO AMARILLO:** Señales mixtas. Evita la exposición riesgosa y mantén la mayor parte de tu patrimonio en reserva (USDT).")
+    st.warning("🟡 **ESTADO AMARILLO:** Señales divididas (mercado dudoso). Mejor esperar a que haya más fuerza o mantener el capital seguro en dólares (USDT).")
 else:
-    st.error("🔴 **ESTADO ROJO:** Probabilidades en contra. Cierre de operaciones especulativas; priorizar defensa del balance general.")
+    st.error("🔴 **ESTADO ROJO:** Riesgo extremo. Probabilidades en contra. Prohibido comprar. Priorizar la defensa del balance general.")
