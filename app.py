@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.31", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.32", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.31")
-st.caption("Terminal Cuantitativa Pro | Navegación por Pestañas, Simulador de Práctica y Nube")
+st.title("👁️ Oculoos Trading v5.32")
+st.caption("Terminal Cuantitativa Pro | Navegación por Pestañas, Simulador Corregido y Nube")
 st.markdown("---")
 
 # ==========================================
@@ -376,37 +376,37 @@ with tab4:
         }), use_container_width=True)
 
 # ---------------------------------------------------------
-# PESTAÑA 5: NUEVO SIMULADOR DE PRÁCTICA REAL (PRACTICAR EN VIVO)
+# PESTAÑA 5: SIMULADOR DE PRÁCTICA REAL (CORREGIDO)
 # ---------------------------------------------------------
 with tab5:
     st.subheader("🎮 Simulador de Práctica Real (Sandbox en Vivo)")
     st.caption("Practica tus entradas, salidas parciales y manejo de Break-Even con precios reales del mercado sin arriesgar un solo centavo.")
 
     sim_p_col1, sim_p_col2, sim_p_col3 = st.columns(3)
-    with sim_p_col1: sim_asset = st.selectbox("Activo de Práctica:", ["Bitcoin", "Oro"], key="sandbox_asset")
-    with sim_p_col2: sim_dir = st.selectbox("Dirección:", ["Compra (Long)", "Venta (Short)"], key="sandbox_dir")
-    with sim_p_col3: sim_monto = st.number_input("Capital Virtual a Usar ($)", value=500.0, step=50.0, key="sandbox_monto")
+    with sim_p_col1: sim_asset = st.selectbox("Activo de Práctica:", ["Bitcoin", "Oro"], key="sandbox_asset_sel")
+    with sim_p_col2: sim_dir = st.selectbox("Dirección:", ["Compra (Long)", "Venta (Short)"], key="sandbox_dir_sel")
+    with sim_p_col3: sim_monto = st.number_input("Capital Virtual a Usar ($)", value=500.0, step=50.0, key="sandbox_monto_val")
 
     precio_real_sandbox = market_data_init.get(sim_asset, {}).get('price', 60000.0)
     if precio_real_sandbox == 0: precio_real_sandbox = 60000.0
 
     st.info(f"💡 Precio de mercado en tiempo real para simulación en **{sim_asset}**: **${precio_real_sandbox:,.2f} USD**")
 
-    if st.button("🚀 Simular Apertura de Posición Virtual", key="btn_sandbox"):
-        st.session_state['sandbox_active'] = True
-        st.session_state['sandbox_asset'] = sim_asset
-        st.session_state['sandbox_dir'] = sim_dir
-        st.session_state['sandbox_entry'] = precio_real_sandbox
-        st.session_state['sandbox_monto'] = sim_monto
+    if st.button("🚀 Simular Apertura de Posición Virtual", key="btn_sandbox_open"):
+        st.session_state['sb_active'] = True
+        st.session_state['sb_asset'] = sim_asset
+        st.session_state['sb_dir'] = sim_dir
+        st.session_state['sb_entry'] = precio_real_sandbox
+        st.session_state['sb_monto'] = sim_monto
         st.success(f"✅ ¡Posición virtual abierta en {sim_asset} a un precio de entrada de ${precio_real_sandbox:,.2f}!")
 
-    if st.session_state.get('sandbox_active', False):
+    if st.session_state.get('sb_active', False):
         st.markdown("---")
         st.markdown("### 📊 Panel de Control de tu Operación Virtual en Curso")
         
-        entry_v = st.session_state['sandbox_entry']
-        monto_v = st.session_state['sandbox_monto']
-        dir_v = st.session_state['sandbox_dir']
+        entry_v = st.session_state.get('sb_entry', precio_real_sandbox)
+        monto_v = st.session_state.get('sb_monto', 500.0)
+        dir_v = st.session_state.get('sb_dir', "Compra (Long)")
         
         # Calcular PnL flotante en tiempo real con el precio actual de mercado
         if "Compra" in dir_v:
@@ -425,6 +425,6 @@ with tab5:
         > **Instrucciones de Práctica:** Observa cómo fluctúa el precio en vivo. Simula mentalmente o en tu cuaderno cuándo aplicarías tu **Fase 1 (Venta del 50%)** y cuándo moverías tu Stop Loss a **Break-Even**.
         """)
         
-        if st.button("🔄 Cerrar Posición Virtual y Reiniciar", key="btn_close_sandbox"):
-            st.session_state['sandbox_active'] = False
+        if st.button("🔄 Cerrar Posición Virtual y Reiniciar", key="btn_close_sandbox_action"):
+            st.session_state['sb_active'] = False
             st.rerun()
