@@ -10,15 +10,15 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.4", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.5", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.4")
-st.caption("Panel Cuantitativo Avanzado | Datos en Tiempo Real y Nube")
+st.title("📊 Terminal Financiera Institucional v5.5")
+st.caption("Panel Cuantitativo Ultra-Rápido | Sin Retrasos y Conectado a la Nube")
 st.markdown("---")
 
 # ==========================================
-# FUNCIONES MATEMÁTICAS Y DE DATOS (SIN CACHÉ PARA TIEMPO REAL)
+# FUNCIONES MATEMÁTICAS Y DE DATOS (OPTIMIZADAS PARA VELOCIDAD)
 # ==========================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -29,6 +29,7 @@ def calculate_rsi(series, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
+@st.cache_data(ttl=15) # Actualización rápida en tiempo real sin congelar la app
 def load_data():
     tickers = {
         "Bitcoin": "BTC-USD",
@@ -81,7 +82,7 @@ st.caption("Regla institucional: Nunca comprometas liquidez sin medir el impacto
 st.markdown("---")
 
 # ==========================================
-# 2. PANEL MACROECONÓMICO E INTERMERCADOS (EN TIEMPO REAL)
+# 2. PANEL MACROECONÓMICO E INTERMERCADOS (INSTANTÁNEO)
 # ==========================================
 st.subheader("🌐 Panel Intermercados y Macroeconomía")
 
