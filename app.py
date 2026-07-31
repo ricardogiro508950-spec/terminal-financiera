@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.22", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.25", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.22")
-st.caption("Terminal Cuantitativa Pro | Flujo de Trabajo Institucional y Nube")
+st.title("👁️ Oculoos Trading v5.25")
+st.caption("Terminal Cuantitativa Pro | Flujo Institucional, Salidas Inteligentes y Nube Completa")
 st.markdown("---")
 
 # ==========================================
@@ -68,7 +68,6 @@ def load_data(interval_type):
 
 @st.cache_data(ttl=15)
 def load_mtf_data(asset_name):
-    """Descarga datos de 3 temporalidades simultáneas para la matriz ICT"""
     ticker = "BTC-USD" if asset_name == "Bitcoin" else "GC=F"
     try:
         df_1d = yf.Ticker(ticker).history(period="3mo", interval="1d")
@@ -79,7 +78,7 @@ def load_mtf_data(asset_name):
         return None
 
 # ==========================================
-# PASO 1: GESTIÓN DE RIESGO (Ubicado estratégicamente arriba)
+# PASO 1: GESTIÓN DE RIESGO Y AUDITORÍA
 # ==========================================
 st.subheader("🛡️ PASO 1: Auditoría de Capital y Gestión de Riesgo")
 st.caption("Regla Institucional: Define tu pérdida máxima antes de mirar los gráficos.")
@@ -96,6 +95,26 @@ with r_col1: st.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
 with r_col2: st.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} USD")
 st.markdown("---")
 
+# ==========================================
+# NUEVO: CALCULADORA DE SALIDAS INTELIGENTES (PARCIALES Y BREAK-EVEN)
+# ==========================================
+with st.expander("🎯 Módulo de Gestión Avanzada: Calculadora de Salidas Inteligentes", expanded=True):
+    st.markdown("Configura los precios para asegurar el 50% de ganancia y mover tu Stop Loss al punto de entrada (Cero Riesgo).")
+    calc_c1, calc_c2, calc_c3 = st.columns(3)
+    with calc_c1: precio_entrada_sim = st.number_input("Precio de Compra Estimado ($)", value=60000.0, step=100.0)
+    with calc_c2: meta_final_sim = st.number_input("Meta Final Deseada ($)", value=66000.0, step=100.0)
+    with calc_c3: stop_inicial_sim = st.number_input("Stop Loss Inicial ($)", value=57000.0, step=100.0)
+
+    if meta_final_sim > precio_entrada_sim:
+        mitad_camino = precio_entrada_sim + ((meta_final_sim - precio_entrada_sim) / 2)
+        st.markdown(f"""
+        * **1️⃣ Meta Parcial (Vender 50%):** Al llegar a **${mitad_camino:,.2f}**, vende la mitad de tus posiciones para asegurar efectivo.
+        * **2️⃣ El Nuevo Piso (Break-Even):** En ese preciso instante, mueve tu Stop Loss al precio de entrada **${precio_entrada_sim:,.2f}**. ¡Tu riesgo se vuelve CERO!
+        * **3️⃣ Meta Final:** Deja correr el 50% restante hasta los **${meta_final_sim:,.2f}**.
+        """)
+    else:
+        st.warning("⚠️ La meta final debe ser mayor al precio de entrada.")
+st.markdown("---")
 
 # ==========================================
 # SECCIÓN EN VIVO (ACTUALIZACIÓN CADA 1 SEG)
@@ -266,7 +285,7 @@ st.markdown("---")
 # PASO 5: BITÁCORA Y NUBE
 # ==========================================
 st.subheader("💼 PASO 5: Registro de Operaciones y Bitácora")
-st.caption("Si encontraste una oportunidad tras los pasos anteriores, ejecuta en tu Exchange y registra aquí tu operación.")
+st.caption("Registra tus compras aquí. El sistema cruzará tus datos con el mercado en vivo para calcular tus ganancias o pérdidas reales.")
 
 @st.cache_resource(ttl=60)
 def get_sheet_data():
@@ -276,22 +295,39 @@ def get_sheet_data():
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1k-H50JiL6U41E6ne8qcmHeSvaoC8HCTe9DqWIQlP-Xo/edit").sheet1
-        return sheet, pd.DataFrame(sheet.get_all_records())
-    except:
+        registros = sheet.get_all_records()
+        return sheet, pd.DataFrame(registros)
+    except Exception as e:
         return None, pd.DataFrame()
 
 worksheet, df_trades = get_sheet_data()
 
+if worksheet is None:
+    st.error("⚠️ No se pudo conectar a Google Sheets. Verifica los Secretos en Streamlit.")
+
 with st.form("registro_operacion", clear_on_submit=True):
     col_a, col_b, col_c, col_d = st.columns(4)
-    with col_a: nuevo_activo = st.selectbox("Activo", ["Bitcoin", "Oro"])
-    with col_b: nuevo_tipo = st.selectbox("Tipo", ["Compra"])
-    with col_c: nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f")
-    with col_d: nuevo_precio = st.number_input("Precio Compra ($)", value=60000.0, min_value=0.1, format="%.2f")
+    with col_a:
+        nuevo_activo = st.selectbox("Activo", ["Bitcoin", "Oro"])
+    with col_b:
+        nuevo_tipo = st.selectbox("Tipo", ["Compra"])
+    with col_c:
+        nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f")
+    with col_d:
+        market_data_temp, _ = load_data("1 Día (1D)")
+        raw_precio = market_data_temp.get(nuevo_activo, {}).get('price', 60000.0)
+        precio_seguro = float(raw_precio) if raw_precio > 0 else (60000.0 if nuevo_activo == "Bitcoin" else 2000.0)
+        nuevo_precio = st.number_input("Precio Compra ($)", value=precio_seguro, min_value=0.1, format="%.2f")
     
-    if st.form_submit_button("➕ Registrar Operación") and nueva_cantidad > 0 and worksheet is not None:
+    submit_trade = st.form_submit_button("➕ Registrar Operación")
+    
+    if submit_trade and nueva_cantidad > 0 and worksheet is not None:
+        fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        inversion = nueva_cantidad * nuevo_precio
+        nueva_fila = [fecha_actual, nuevo_activo, nuevo_tipo, float(nueva_cantidad), float(nuevo_precio), float(inversion)]
+        
         try:
-            worksheet.append_row([datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), nuevo_activo, nuevo_tipo, float(nueva_cantidad), float(nuevo_precio), float(nueva_cantidad * nuevo_precio)])
+            worksheet.append_row(nueva_fila)
             st.success("✅ ¡Operación registrada en la nube!")
             st.rerun()
         except Exception as e:
@@ -299,6 +335,7 @@ with st.form("registro_operacion", clear_on_submit=True):
 
 if not df_trades.empty and 'Activo' in df_trades.columns:
     df_trades['Cantidad'] = pd.to_numeric(df_trades['Cantidad'], errors='coerce')
+    df_trades['Precio_Entrada'] = pd.to_numeric(df_trades['Precio_Entrada'], errors='coerce')
     df_trades['Inversion_Inicial_USD'] = pd.to_numeric(df_trades['Inversion_Inicial_USD'], errors='coerce')
     
     market_data_temp, _ = load_data("1 Día (1D)")
@@ -307,7 +344,24 @@ if not df_trades.empty and 'Activo' in df_trades.columns:
     df_trades['Valor_Actual_USD'] = df_trades['Cantidad'] * df_trades['Precio_Actual_Mercado']
     df_trades['Ganancia/Perdida_USD'] = df_trades['Valor_Actual_USD'] - df_trades['Inversion_Inicial_USD']
     
+    inversion_total = df_trades['Inversion_Inicial_USD'].sum()
+    valor_actual_total = df_trades['Valor_Actual_USD'].sum()
+    ganancia_neta = valor_actual_total - inversion_total
+    rendimiento_total = (ganancia_neta / inversion_total) * 100 if inversion_total > 0 else 0
+    
+    st.markdown("### 📊 Rendimiento del Portafolio en Vivo")
+    res_col1, res_col2, res_col3 = st.columns(3)
+    res_col1.metric("Inversión Total", f"${inversion_total:,.2f}")
+    res_col2.metric("Valor Actual", f"${valor_actual_total:,.2f}", f"{ganancia_neta:,.2f} USD")
+    res_col3.metric("Rendimiento Neto", f"{rendimiento_total:.2f}%")
+    
     st.dataframe(df_trades.style.format({
-        "Cantidad": "{:.5f}", "Precio_Entrada": "${:,.2f}", "Inversion_Inicial_USD": "${:,.2f}",
-        "Precio_Actual_Mercado": "${:,.2f}", "Valor_Actual_USD": "${:,.2f}", "Ganancia/Perdida_USD": "${:,.2f}"
+        "Cantidad": "{:.5f}",
+        "Precio_Entrada": "${:,.2f}",
+        "Inversion_Inicial_USD": "${:,.2f}",
+        "Precio_Actual_Mercado": "${:,.2f}",
+        "Valor_Actual_USD": "${:,.2f}",
+        "Ganancia/Perdida_USD": "${:,.2f}"
     }), use_container_width=True)
+else:
+    st.info("No tienes operaciones registradas. Ingresa una compra en el formulario de arriba.")
