@@ -11,10 +11,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.25", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.26", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.25")
+st.title("👁️ Oculoos Trading v5.26")
 st.caption("Terminal Cuantitativa Pro | Flujo Institucional, Salidas Inteligentes y Nube Completa")
 st.markdown("---")
 
@@ -96,14 +96,14 @@ with r_col2: st.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} U
 st.markdown("---")
 
 # ==========================================
-# NUEVO: CALCULADORA DE SALIDAS INTELIGENTES (PARCIALES Y BREAK-EVEN)
+# MÓDULO DE GESTIÓN AVANZADA: CALCULADORA DE SALIDAS INTELIGENTES
 # ==========================================
-with st.expander("🎯 Módulo de Gestión Avanzada: Calculadora de Salidas Inteligentes", expanded=True):
+with st.expander("🎯 Módulo de Gestión Avanzada: Calculadora de Salidas Inteligentes (Parciales y Break-Even)", expanded=False):
     st.markdown("Configura los precios para asegurar el 50% de ganancia y mover tu Stop Loss al punto de entrada (Cero Riesgo).")
     calc_c1, calc_c2, calc_c3 = st.columns(3)
-    with calc_c1: precio_entrada_sim = st.number_input("Precio de Compra Estimado ($)", value=60000.0, step=100.0)
-    with calc_c2: meta_final_sim = st.number_input("Meta Final Deseada ($)", value=66000.0, step=100.0)
-    with calc_c3: stop_inicial_sim = st.number_input("Stop Loss Inicial ($)", value=57000.0, step=100.0)
+    with calc_c1: precio_entrada_sim = st.number_input("Precio de Compra Estimado ($)", value=60000.0, step=100.0, key="sim_entry")
+    with calc_c2: meta_final_sim = st.number_input("Meta Final Deseada ($)", value=66000.0, step=100.0, key="sim_target")
+    with calc_c3: stop_inicial_sim = st.number_input("Stop Loss Inicial ($)", value=57000.0, step=100.0, key="sim_sl")
 
     if meta_final_sim > precio_entrada_sim:
         mitad_camino = precio_entrada_sim + ((meta_final_sim - precio_entrada_sim) / 2)
@@ -308,16 +308,16 @@ if worksheet is None:
 with st.form("registro_operacion", clear_on_submit=True):
     col_a, col_b, col_c, col_d = st.columns(4)
     with col_a:
-        nuevo_activo = st.selectbox("Activo", ["Bitcoin", "Oro"])
+        nuevo_activo = st.selectbox("Activo", ["Bitcoin", "Oro"], key="reg_asset")
     with col_b:
-        nuevo_tipo = st.selectbox("Tipo", ["Compra"])
+        nuevo_tipo = st.selectbox("Tipo", ["Compra"], key="reg_type")
     with col_c:
-        nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f")
+        nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f", key="reg_qty")
     with col_d:
         market_data_temp, _ = load_data("1 Día (1D)")
         raw_precio = market_data_temp.get(nuevo_activo, {}).get('price', 60000.0)
         precio_seguro = float(raw_precio) if raw_precio > 0 else (60000.0 if nuevo_activo == "Bitcoin" else 2000.0)
-        nuevo_precio = st.number_input("Precio Compra ($)", value=precio_seguro, min_value=0.1, format="%.2f")
+        nuevo_precio = st.number_input("Precio Compra ($)", value=precio_seguro, min_value=0.1, format="%.2f", key="reg_price")
     
     submit_trade = st.form_submit_button("➕ Registrar Operación")
     
