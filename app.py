@@ -10,11 +10,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.0", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.1", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.0")
-st.caption("Panel Avanzado | Aprendizaje, Auditoría y Gestión de Portafolio en la Nube")
+st.title("📊 Terminal Financiera Institucional v5.1")
+st.caption("Panel Cuantitativo Avanzado | Análisis en Vivo y Libro Mayor en la Nube")
 st.markdown("---")
 
 # ==========================================
@@ -71,9 +71,10 @@ tamano_posicion = riesgo_usd / (stop_loss_pct / 100) if stop_loss_pct > 0 else 0
 st.sidebar.markdown("### 📊 Flujo de Caja Proyectado")
 st.sidebar.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
 st.sidebar.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} USD")
+st.sidebar.markdown("Regla institucional: Nunca comprometas liquidez sin medir el impacto de una pérdida.")
 
 # ==========================================
-# 1. PANEL MACROECONÓMICO
+# 1. PANEL MACROECONÓMICO E INTERMERCADOS
 # ==========================================
 st.subheader("🌐 Panel Intermercados y Macroeconomía")
 
@@ -90,13 +91,14 @@ col4.metric("Bono 10 Años (US10Y)", f"{bond_info['price']:,.2f}", f"{bond_info[
 st.markdown("---")
 
 # ==========================================
-# 2. MOTOR TÉCNICO Y GRÁFICOS
+# 2. MOTOR TÉCNICO Y GRÁFICOS INTERACTIVOS
 # ==========================================
 st.subheader("📈 Análisis Cuantitativo & Gráficos Interactivos")
 asset_choice = st.selectbox("Seleccione activo para análisis técnico detallado:", ["Bitcoin", "Oro"])
 
 current_close = 0
 current_ema50 = 0
+current_ema200 = 0
 current_rsi = 50
 
 if asset_choice in market_history:
@@ -105,21 +107,66 @@ if asset_choice in market_history:
     df_asset["EMA_200"] = df_asset["Close"].ewm(span=200, adjust=False).mean() if len(df_asset) >= 200 else df_asset["Close"].ewm(span=len(df_asset), adjust=False).mean()
     df_asset["RSI"] = calculate_rsi(df_asset["Close"])
 
-    # Gráfico
+    current_close = df_asset["Close"].iloc[-1]
+    current_ema50 = df_asset["EMA_50"].iloc[-1]
+    current_ema200 = df_asset["EMA_200"].iloc[-1]
+    current_rsi = df_asset["RSI"].iloc[-1]
+
+    # Mostrar métricas clave arriba del gráfico
+    m1, m2, m3 = st.columns(3)
+    m1.metric("RSI (14 periodos)", f"{current_rsi:.2f}")
+    m2.metric("EMA 50", f"${current_ema50:,.2f}")
+    m3.metric("EMA 200", f"${current_ema200:,.2f}")
+
+    # Gráfico interactivo con Plotly
     fig = go.Figure()
     fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
     fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
     fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
-    fig.update_layout(title=f"Acción del Precio - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_white", height=500, margin=dict(l=20, r=20, t=40, b=20))
+    fig.update_layout(title=f"Acción del Precio e Indicadores - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_dark", height=500, margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig, use_container_width=True)
+
 st.markdown("---")
 
 # ==========================================
-# 3. BITÁCORA DE OPERACIONES (CONECTADA A GOOGLE SHEETS)
+# 3. TRADUCTOR DEL MERCADO EN VIVO
 # ==========================================
-st.subheader("💼 Mi Portafolio y Bitácora (Sincronizado a la Nube)")
+st.subheader("📝 Traductor del Mercado en Vivo")
 
-# Inicializar conexión a Sheets
+dxy_chg = dxy_info['change']
+bond_chg = bond_info['change']
+
+dxy_status = "BUENO. Inyecta liquidez a los activos de riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Fortaleza del dólar ejerce presión bajista."
+bond_status = "MALO para el riesgo." if bond_chg > 0 else "FAVORABLE para los activos de riesgo."
+rsi_status = "SORECOMPRADO (>70). Alerta de posible corrección." if current_rsi > 70 else ("SORESOVENDIDO (<30). Posible zona de rebote." if current_rsi < 30 else "SANO. Subiendo o bajando de forma orgánica.")
+ema_status = "Precio operando por encima de la EMA 50. Tendencia alcista activa." if current_close > current_ema50 else "Precio atrapado debajo de la EMA 50. PRECAUCIÓN. Resistencia activa."
+
+st.markdown(f"* **El Viento a Favor (Macro):** El Índice Dólar cae ({dxy_chg:.2f}%). {dxy_status}")
+st.markdown(f"* **Tasas de Interés:** El Bono a 10 Años sube/baja ({bond_chg:.2f}%). {bond_status}")
+st.markdown(f"* **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. {rsi_status}")
+st.markdown(f"* **Batalla Técnica:** {ema_status}")
+
+st.markdown("---")
+
+# ==========================================
+# 4. ALGORITMO DE CONFLUENCIA
+# ==========================================
+if current_close > current_ema50 and current_rsi < 70:
+    st.success("🟢 **ESTADO VERDE:** Alta confluencia alcista. Condiciones técnicas favorables para operar.")
+elif current_close < current_ema50 and current_rsi > 30:
+    st.warning("🟡 **ESTADO AMARILLO:** Señales divididas. Mercado dudoso, mantén liquidez.")
+else:
+    st.error("🔴 **ESTADO ROJO:** Alta volatilidad o zona de extremidad técnica. Riesgo elevado.")
+
+st.markdown("---")
+
+# ==========================================
+# 5. BITÁCORA DE TRADING Y PORTAFOLIO (NUBE)
+# ==========================================
+st.subheader("💼 Mi Portafolio y Bitácora de Trading")
+st.caption("Registra tus compras aquí. El sistema cruzará tus datos con el mercado en vivo para calcular tus ganancias o pérdidas reales.")
+
+# Inicializar conexión a Google Sheets
 @st.cache_resource(ttl=60)
 def get_sheet_data():
     try:
@@ -138,7 +185,7 @@ worksheet, df_trades = get_sheet_data()
 if worksheet is None:
     st.error("⚠️ No se pudo conectar a Google Sheets. Verifica los Secretos en Streamlit.")
 
-# Formulario de Compra
+# Formulario de Registro en Vivo
 with st.form("registro_operacion", clear_on_submit=True):
     col_a, col_b, col_c, col_d = st.columns(4)
     with col_a:
@@ -146,13 +193,13 @@ with st.form("registro_operacion", clear_on_submit=True):
     with col_b:
         nuevo_tipo = st.selectbox("Tipo", ["Compra"])
     with col_c:
-        nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f")
+        nueva_cantidad = st.number_input("Cantidad de monedas/onzas", min_value=0.00001, format="%.5f")
     with col_d:
         raw_precio = btc_info['price'] if nuevo_activo == "Bitcoin" else gold_info['price']
         precio_seguro = float(raw_precio) if raw_precio > 0 else (60000.0 if nuevo_activo == "Bitcoin" else 2000.0)
-        nuevo_precio = st.number_input("Precio de Compra", value=precio_seguro, min_value=0.1, format="%.2f")
+        nuevo_precio = st.number_input("Precio de Compra (USD)", value=precio_seguro, min_value=0.1, format="%.2f")
     
-    submit_trade = st.form_submit_button("➕ Registrar en la Nube")
+    submit_trade = st.form_submit_button("➕ Registrar Operación")
     
     if submit_trade and nueva_cantidad > 0 and worksheet is not None:
         fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -161,12 +208,12 @@ with st.form("registro_operacion", clear_on_submit=True):
         
         try:
             worksheet.append_row(nueva_fila)
-            st.success("✅ ¡Operación auditada y guardada en Google Sheets!")
+            st.success("✅ ¡Operación registrada y guardada en la nube con éxito!")
             st.rerun()
         except Exception as e:
-            st.error(f"Error al escribir en el Excel: {e}")
+            st.error(f"Error al escribir en la base de datos: {e}")
 
-# Panel de Rendimiento Oficial
+# Panel de Rendimiento en Tiempo Real Cruzado con la Nube
 if not df_trades.empty and 'Activo' in df_trades.columns:
     df_trades['Cantidad'] = pd.to_numeric(df_trades['Cantidad'], errors='coerce')
     df_trades['Precio_Entrada'] = pd.to_numeric(df_trades['Precio_Entrada'], errors='coerce')
@@ -182,10 +229,10 @@ if not df_trades.empty and 'Activo' in df_trades.columns:
     ganancia_neta = valor_actual_total - inversion_total
     rendimiento_total = (ganancia_neta / inversion_total) * 100 if inversion_total > 0 else 0
     
-    st.markdown("### 📊 Rendimiento del Libro Mayor")
+    st.markdown("### 📊 Rendimiento del Portafolio en Vivo")
     res_col1, res_col2, res_col3 = st.columns(3)
     res_col1.metric("Inversión Total", f"${inversion_total:,.2f}")
-    res_col2.metric("Valor Actual", f"${valor_actual_total:,.2f}", f"{ganancia_neta:,.2f} USD")
+    res_col2.metric("Valor Actual en Mercado", f"${valor_actual_total:,.2f}", f"{ganancia_neta:,.2f} USD")
     res_col3.metric("Rendimiento Neto", f"{rendimiento_total:.2f}%")
     
     st.dataframe(df_trades.style.format({
@@ -197,4 +244,4 @@ if not df_trades.empty and 'Activo' in df_trades.columns:
         "Ganancia/Perdida_USD": "${:,.2f}"
     }), use_container_width=True)
 else:
-    st.info("Tu base de datos está vacía. Ingresa tu primera compra para estrenarla.")
+    st.info("No tienes operaciones registradas. Ingresa una compra en el formulario de arriba para iniciar la simulación en vivo.")
