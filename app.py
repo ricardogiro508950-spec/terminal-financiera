@@ -120,14 +120,13 @@ st.markdown("---")
 st.subheader("💼 Mi Portafolio y Bitácora (Sincronizado a la Nube)")
 
 # Inicializar conexión a Sheets
-@st.cache_resource(ttl=60) # Recarga los datos de sheets cada minuto
+@st.cache_resource(ttl=60)
 def get_sheet_data():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds_dict = json.loads(st.secrets["google_credentials_json"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        # URL exacta de tu archivo de auditoría
         sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1k-H50JiL6U41E6ne8qcmHeSvaoC8HCTe9DqWIQlP-Xo/edit").sheet1
         registros = sheet.get_all_records()
         return sheet, pd.DataFrame(registros)
@@ -149,8 +148,9 @@ with st.form("registro_operacion", clear_on_submit=True):
     with col_c:
         nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f")
     with col_d:
-        precio_actual = btc_info['price'] if nuevo_activo == "Bitcoin" else gold_info['price']
-        nuevo_precio = st.number_input("Precio de Compra", value=float(precio_actual), min_value=0.1)
+        raw_precio = btc_info['price'] if nuevo_activo == "Bitcoin" else gold_info['price']
+        precio_seguro = float(raw_precio) if raw_precio > 0 else (60000.0 if nuevo_activo == "Bitcoin" else 2000.0)
+        nuevo_precio = st.number_input("Precio de Compra", value=precio_seguro, min_value=0.1, format="%.2f")
     
     submit_trade = st.form_submit_button("➕ Registrar en la Nube")
     
@@ -162,7 +162,7 @@ with st.form("registro_operacion", clear_on_submit=True):
         try:
             worksheet.append_row(nueva_fila)
             st.success("✅ ¡Operación auditada y guardada en Google Sheets!")
-            st.rerun() # Actualiza la página para mostrar el nuevo dato
+            st.rerun()
         except Exception as e:
             st.error(f"Error al escribir en el Excel: {e}")
 
