@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.22", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.23", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.22")
-st.caption("Terminal Cuantitativa Pro | Flujo de Trabajo Institucional y Nube")
+st.title("👁️ Oculoos Trading v5.23")
+st.caption("Terminal Cuantitativa Pro | Flujo de Trabajo Institucional y Simulador OCO")
 st.markdown("---")
 
 # ==========================================
@@ -79,7 +79,7 @@ def load_mtf_data(asset_name):
         return None
 
 # ==========================================
-# PASO 1: GESTIÓN DE RIESGO (Ubicado estratégicamente arriba)
+# PASO 1: GESTIÓN DE RIESGO
 # ==========================================
 st.subheader("🛡️ PASO 1: Auditoría de Capital y Gestión de Riesgo")
 st.caption("Regla Institucional: Define tu pérdida máxima antes de mirar los gráficos.")
@@ -95,7 +95,6 @@ r_col1, r_col2 = st.columns(2)
 with r_col1: st.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
 with r_col2: st.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} USD")
 st.markdown("---")
-
 
 # ==========================================
 # SECCIÓN EN VIVO (ACTUALIZACIÓN CADA 1 SEG)
@@ -257,16 +256,52 @@ def render_live_market():
         else:
             st.error("🔴 **ESTADO ROJO:** Riesgo técnico severo. Evitar operar o usar stop loss ajustado.")
 
+    st.markdown("---")
+
+    # ================= PASO 5 =================
+    st.subheader(f"🤖 PASO 5: Simulador de Orden OCO en Vivo ({asset_choice})")
+    st.caption("Cálculo automático para tu exchange. Usa una relación Riesgo-Beneficio de 1:2 basada en tu gestión del Paso 1.")
+
+    if current_close > 0:
+        # Lógica de sugerencia de mercado
+        if current_close > current_ema50:
+            direccion = "COMPRA (Mercado Spot) 🟢"
+            # Cálculos para compra (Long)
+            tp_price = current_close * (1 + ((stop_loss_pct * 2) / 100)) # Doble de ganancia que de pérdida
+            sl_price = current_close * (1 - (stop_loss_pct / 100))
+            limit_sl = sl_price * 0.999 # Ligeramente abajo para ejecución segura
+        else:
+            direccion = "MERCADO BAJISTA - ESPERAR O BUSCAR VENTAS (Futuros) 🔴"
+            # Cálculos invertidos para venta corta
+            tp_price = current_close * (1 - ((stop_loss_pct * 2) / 100))
+            sl_price = current_close * (1 + (stop_loss_pct / 100))
+            limit_sl = sl_price * 1.001
+
+        cantidad_cripto = tamano_posicion / current_close if current_close > 0 else 0
+
+        st.markdown(f"**Recomendación Actual:** {direccion}")
+        st.markdown(f"**Precio de Entrada (Market):** `${current_close:,.2f}`")
+        st.markdown(f"**Monto a Invertir (Del Paso 1):** `${tamano_posicion:,.2f} USD` (Aprox. `{cantidad_cripto:,.5f}` unidades)")
+
+        st.markdown("### Configuración de la Orden OCO (Binance)")
+        col_oco1, col_oco2, col_oco3 = st.columns(3)
+        with col_oco1:
+            st.info(f"**1. Precio (Take Profit)**\n\n### ${tp_price:,.2f}")
+        with col_oco2:
+            st.warning(f"**2. Stop (Alarma)**\n\n### ${sl_price:,.2f}")
+        with col_oco3:
+            st.error(f"**3. Límite (Salida)**\n\n### ${limit_sl:,.2f}")
+
 # Ejecutar el fragmento en vivo
 render_live_market()
 
 st.markdown("---")
 
 # ==========================================
-# PASO 5: BITÁCORA Y NUBE
+# PASO 6: BITÁCORA Y NUBE
 # ==========================================
-st.subheader("💼 PASO 5: Registro de Operaciones y Bitácora")
-st.caption("Si encontraste una oportunidad tras los pasos anteriores, ejecuta en tu Exchange y registra aquí tu operación.")
+st.subheader("💼 PASO 6: Registro de Operaciones y Bitácora")
+st.caption("Si ejecutaste la operación en tu Exchange, regístrala aquí para tu historial en la nube.")
 
 @st.cache_resource(ttl=60)
 def get_sheet_data():
