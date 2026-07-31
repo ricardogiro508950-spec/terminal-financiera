@@ -11,22 +11,25 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.38", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v5.39", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # ==========================================
-# INICIALIZACIÓN DE VARIABLES Y CALLBACKS
+# INICIALIZACIÓN DE VARIABLES (BLINDAJE DE ERRORES)
 # ==========================================
 if 'audit_cap' not in st.session_state: st.session_state.audit_cap = 1000.0
 if 'audit_rsk' not in st.session_state: st.session_state.audit_rsk = 1.0
 if 'audit_sl' not in st.session_state: st.session_state.audit_sl = 5.0
 if 'monto_inv_term' not in st.session_state: st.session_state.monto_inv_term = 200.0
 
+if 'sim_estado' not in st.session_state: st.session_state.sim_estado = 'INACTIVO'
 if 'sim_balance' not in st.session_state: st.session_state.sim_balance = 10000.0 
+if 'sim_pnl_historico' not in st.session_state: st.session_state.sim_pnl_historico = 0.0
 if 'sim_rsk_pct' not in st.session_state: st.session_state.sim_rsk_pct = 1.0
 if 'sim_sl_pct' not in st.session_state: st.session_state.sim_sl_pct = 5.0
 if 'monto_inv_sim' not in st.session_state: st.session_state.monto_inv_sim = 2000.0 
 
+# Funciones de reacción (Callbacks) para los cálculos automáticos
 def update_monto_term():
     cap = st.session_state.audit_cap
     rsk = st.session_state.audit_rsk
@@ -35,7 +38,7 @@ def update_monto_term():
         st.session_state.monto_inv_term = (cap * (rsk / 100)) / (sl / 100)
 
 def update_monto_sim():
-    bal = st.session_state.get('sim_balance', 10000.0)
+    bal = st.session_state.sim_balance
     rsk = st.session_state.sim_rsk_pct
     sl = st.session_state.sim_sl_pct
     if sl > 0:
@@ -112,14 +115,14 @@ modo_app = st.sidebar.radio("Selecciona tu área de trabajo:", [
     "🎮 Simulador Completo (Práctica)"
 ])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v5.38")
+st.sidebar.caption("Oculoos Trading v5.39")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal (Operación Real)":
     
-    st.title("👁️ Oculoos Trading v5.38 | Terminal de Operación")
+    st.title("👁️ Oculoos Trading v5.39 | Terminal de Operación")
     st.caption("Flujo Institucional, Gestión de Riesgo y Registro en Nube")
     st.markdown("---")
 
@@ -340,8 +343,6 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
     st.caption("Practica ambas estrategias con precios y gráficos reales del mercado sin arriesgar un centavo.")
     st.markdown("---")
 
-    if 'sim_estado' not in st.session_state: st.session_state.sim_estado = 'INACTIVO'
-
     # Panel de Saldo
     st.markdown(f"### 💰 Saldo de Práctica: **${st.session_state.sim_balance:,.2f} USD**")
     st.markdown(f"Ganancia/Pérdida Acumulada: **${st.session_state.sim_pnl_historico:,.2f} USD**")
@@ -370,6 +371,7 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
         riesgo_max_usd = st.session_state.sim_balance * (s_riesgo_pct / 100)
         st.info(f"💡 Precio actual de **{s_asset}**: **${precio_actual:,.2f}**. | Sugerencia Institucional: Arriesgando el **{s_riesgo_pct:.1f}%**, tu pérdida sería **${riesgo_max_usd:,.2f}**.")
         
+        # Input conectado al callback, permitiendo modificación manual
         s_monto = st.number_input("💸 Inversión a Ejecutar ($ USD) [Calculado automático, pero modificable]:", min_value=1.0, step=50.0, key="monto_inv_sim")
 
         st.markdown("### Selecciona tu Estrategia a Simular")
