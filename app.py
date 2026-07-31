@@ -11,7 +11,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.36", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v5.37", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # ==========================================
@@ -85,14 +85,14 @@ modo_app = st.sidebar.radio("Selecciona tu área de trabajo:", [
     "🎮 Simulador Completo (Práctica)"
 ])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v5.36")
+st.sidebar.caption("Oculoos Trading v5.37")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal (Operación Real)":
     
-    st.title("👁️ Oculoos Trading v5.36 | Terminal de Operación")
+    st.title("👁️ Oculoos Trading v5.37 | Terminal de Operación")
     st.caption("Flujo Institucional, Gestión de Riesgo y Registro en Nube")
     st.markdown("---")
 
@@ -330,16 +330,24 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
     # CONFIGURAR POSICIÓN
     elif st.session_state.sim_estado == 'INACTIVO':
         st.subheader("1️⃣ Configurar y Abrir Posición Virtual")
+        
         c1, c2, c3, c4 = st.columns(4)
         with c1: s_asset = st.selectbox("Activo:", ["Bitcoin", "Oro"])
         with c2: s_dir = st.selectbox("Dirección:", ["Compra (Long)", "Venta (Short)"])
-        with c3: s_monto = st.number_input("Inversión ($ USD):", min_value=10.0, max_value=st.session_state.sim_balance, value=500.0, step=50.0)
-        with c4: s_sl_pct = st.number_input("Distancia de Riesgo / SL (%):", value=5.0, step=0.5)
+        with c3: s_riesgo_pct = st.number_input("Riesgo sobre Saldo (%)", min_value=0.1, value=1.0, step=0.1)
+        with c4: s_sl_pct = st.number_input("Distancia de SL (%):", min_value=0.1, value=5.0, step=0.5)
 
         precio_actual = market_data_init.get(s_asset, {}).get('price', 60000.0)
         if precio_actual == 0: precio_actual = 60000.0
         
-        st.info(f"Precio actual de **{s_asset}**: **${precio_actual:,.2f}**")
+        # Cálculo automático de la inversión recomendada basada en el % de riesgo
+        riesgo_max_usd = st.session_state.sim_balance * (s_riesgo_pct / 100)
+        inversion_calc = riesgo_max_usd / (s_sl_pct / 100) if s_sl_pct > 0 else 0.0
+
+        st.info(f"💡 Precio actual de **{s_asset}**: **${precio_actual:,.2f}**. | Sugerencia Institucional: Arriesgando el **{s_riesgo_pct:.1f}%**, tu posición ideal es **${inversion_calc:,.2f}**.")
+        
+        # El input se llena con el cálculo automático, pero el usuario puede editarlo libremente
+        s_monto = st.number_input("Inversión a Ejecutar ($ USD) [Calculado automático, pero modificable]:", min_value=1.0, max_value=float(st.session_state.sim_balance), value=float(inversion_calc), step=50.0)
 
         st.markdown("### Selecciona tu Estrategia a Simular")
         s_estrategia = st.radio("Método de Operación:", [
@@ -347,7 +355,7 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
             "🤖 Estrategia Automática (Orden OCO: Configuras el Piso y Techo y la App cierra sola)"
         ])
 
-        # Cálculos de Metas Automáticas basados en el riesgo elegido
+        # Cálculos de Metas Automáticas basados en la distancia elegida
         if "Compra" in s_dir:
             sl_calc = precio_actual * (1 - (s_sl_pct / 100))
             dist = precio_actual - sl_calc
@@ -377,7 +385,6 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
             st.session_state.sim_estrategia = s_estrategia
             st.session_state.sim_tp = s_tp
             st.session_state.sim_sl = s_sl
-            # Guardamos las metas sugeridas para dibujarlas en el gráfico
             st.session_state.sim_tp1_calc = tp1_calc
             st.session_state.sim_tp2_calc = tp2_calc
             st.session_state.sim_sl_calc = sl_calc
@@ -457,10 +464,10 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
 
             # GRÁFICO EN VIVO CON LÍNEAS
             if s_asset in m_history:
-                df_sim = m_history[s_asset].tail(80) # Mostrar historial reciente
+                df_sim = m_history[s_asset].tail(80) 
                 fig_sim = go.Figure(data=[go.Candlestick(x=df_sim.index, open=df_sim["Open"], high=df_sim["High"], low=df_sim["Low"], close=df_sim["Close"], name="Precio")])
                 
-                # Dibujar Entrada (Blanco)
+                # Dibujar Entrada
                 fig_sim.add_hline(y=p_entrada, line_dash="dot", line_color="white", annotation_text="Entrada", annotation_position="bottom right")
                 
                 # Dibujar Metas según estado
@@ -473,7 +480,6 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
                         fig_sim.add_hline(y=sl_calc, line_dash="dash", line_color="red", annotation_text="Stop Loss")
                     elif estado_actual == 'FASE1_COMPLETADA':
                         fig_sim.add_hline(y=tp2_calc, line_dash="dash", line_color="green", annotation_text="Meta Final")
-                        # La línea de Break-Even ya está marcada por la línea blanca de Entrada, pero podemos resaltarla:
                         fig_sim.add_hline(y=p_entrada, line_width=2, line_color="blue", annotation_text="Break-Even (Piso)")
                 
                 fig_sim.update_layout(title="Radar de Persecución (15 Minutos)", template="plotly_dark", height=400, margin=dict(l=20, r=20, t=30, b=10))
