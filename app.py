@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.30", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.30 + ORB", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.30")
-st.caption("Terminal Cuantitativa Pro | Dos Simulaciones en Vivo, Gestión Institucional y Nube Completa")
+st.title("👁️ Oculoos Trading v5.30 (Edición Primera Vela)")
+st.caption("Terminal Cuantitativa Pro | Dos Simulaciones, Gestión Institucional, Nube y Radar ORB")
 st.markdown("---")
 
 # ==========================================
@@ -76,6 +76,28 @@ def load_mtf_data(asset_name):
         return {"1D": df_1d, "4H": df_4h, "1H": df_1h}
     except:
         return None
+
+# NUEVA FUNCIÓN: MOTOR DE LA PRIMERA VELA (ORB)
+@st.cache_data(ttl=60)
+def get_orb_levels(asset_name):
+    try:
+        ticker = "BTC-USD" if asset_name == "Bitcoin" else "GC=F"
+        df = yf.Ticker(ticker).history(period="5d", interval="15m")
+        if df.empty: return None, None
+        
+        # Estandarizar a hora de Nueva York
+        if df.index.tz is None: 
+            df.index = df.index.tz_localize('UTC')
+        df.index = df.index.tz_convert('America/New_York')
+        
+        # Buscar las velas exactas de las 9:30 AM
+        df_open = df[(df.index.hour == 9) & (df.index.minute == 30)]
+        if not df_open.empty:
+            last_open = df_open.iloc[-1]
+            return last_open['High'], last_open['Low']
+        return None, None
+    except:
+        return None, None
 
 # Carga inicial de precios en vivo
 market_data_init, _ = load_data("1 Día (1D)")
@@ -220,11 +242,14 @@ def render_live_market():
     with col_reloj2: st.markdown(f"**Estado:** {session_status}")
     st.markdown("---")
 
-    # Controles Generales
+    # Controles Generales y Botón ORB
     st.subheader("⚙️ Configuración del Radar")
-    col_ctrl1, col_ctrl2 = st.columns(2)
+    col_ctrl1, col_ctrl2, col_ctrl3 = st.columns(3)
     with col_ctrl1: asset_choice = st.selectbox("Activo a analizar:", ["Bitcoin", "Oro"], key="asset_live_choice")
     with col_ctrl2: selected_timeframe = st.selectbox("Intervalo de Gráfico:", ["15 Minutos (15m)", "1 Hora (1h)", "4 Horas (4h)", "1 Día (1D)", "1 Semana (1W)", "1 Mes (1M)"], key="global_timeframe")
+    with col_ctrl3: 
+        st.markdown("<br>", unsafe_allow_html=True)
+        usar_orb = st.checkbox("🎯 Activar Radar 'Primera Vela' (NY 9:30 AM)")
 
     market_data, market_history = load_data(selected_timeframe)
 
@@ -291,6 +316,36 @@ def render_live_market():
         st.info("Cargando datos institucionales...")
     st.markdown("---")
 
+    # ================= NUEVO: MÓDULO PRIMERA VELA (ORB) =================
+    if usar_orb:
+        orb_high, orb_low = get_orb_levels(asset_choice)
+        if orb_high and orb_low:
+            st.markdown(f"### 🎯 Radar Activo: Estrategia Primera Vela ({asset_choice})")
+            
+            c_close_actual = market_data.get(asset_choice, {}).get('price', 0.0)
+            estado_orb = "⏳ Dentro del Rango de Apertura (No Operar Todavía)"
+            color_orb = "#6b7280" # Gris
+            
+            if c_close_actual > orb_high:
+                estado_orb = "🟢 RUPTURA ALCISTA CONFIRMADA (Gatillo de Compra)"
+                color_orb = "#10b981"
+            elif c_close_actual > 0 and c_close_actual < orb_low:
+                estado_orb = "🔴 RUPTURA BAJISTA CONFIRMADA (Gatillo de Venta)"
+                color_orb = "#ef4444"
+
+            st.markdown(f"""
+            <div style="background-color: #111827; padding: 15px; border-radius: 8px; border: 1px solid {color_orb}; margin-bottom: 15px;">
+                <h4 style="color: {color_orb}; margin-top:0;">{estado_orb}</h4>
+                <p style="color: #d1d5db; margin-bottom: 5px;">Precio Actual en Vivo: <b>${c_close_actual:,.2f}</b></p>
+                <ul style="color: #9ca3af; font-size: 14px; margin-bottom: 0;">
+                    <li><b>Línea de Techo (Resistencia ORB):</b> ${orb_high:,.2f}</li>
+                    <li><b>Línea de Piso (Soporte ORB):</b> ${orb_low:,.2f}</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.warning("Aún no se han registrado los datos de la primera vela de las 9:30 AM (NY) para el día de hoy.")
+
     # ================= PASO 4 =================
     st.subheader(f"📈 PASO 4: Gráfico Cuantitativo y Traductor [{selected_timeframe}]")
     
@@ -331,6 +386,12 @@ def render_live_market():
         fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
+        
+        # Inyectar las líneas de la estrategia en el gráfico
+        if usar_orb and 'orb_high' in locals() and orb_high and orb_low:
+            fig.add_hline(y=orb_high, line_dash="dash", line_color="#10b981", annotation_text="Techo 1ra Vela", annotation_position="top left")
+            fig.add_hline(y=orb_low, line_dash="dash", line_color="#ef4444", annotation_text="Piso 1ra Vela", annotation_position="bottom left")
+
         fig.update_layout(title=f"Acción del Precio [{selected_timeframe}] - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
