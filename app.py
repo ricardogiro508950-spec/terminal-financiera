@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.20", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.21", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.20")
-st.caption("Terminal Cuantitativa Pro | Matriz Institucional (Smart Money), Intervalos y Nube")
+st.title("👁️ Oculoos Trading v5.21")
+st.caption("Terminal Cuantitativa Pro | Traductor en Vivo, Matriz ICT y Nube")
 st.markdown("---")
 
 # ==========================================
@@ -104,7 +104,7 @@ def render_live_market():
     selected_timeframe = st.selectbox("Seleccione el intervalo de análisis visual:", ["15 Minutos (15m)", "1 Hora (1h)", "4 Horas (4h)", "1 Día (1D)", "1 Semana (1W)", "1 Mes (1M)"], key="global_timeframe")
     market_data, market_history = load_data(selected_timeframe)
 
-    # Panel Macro & Tarjetas
+    # 2. Panel Macro & Tarjetas
     st.subheader("🌐 Panel Intermercados y Macroeconomía")
     col1, col2, col3, col4 = st.columns(4)
     btc, gold, dxy, bond = market_data.get("Bitcoin", {}), market_data.get("Oro", {}), market_data.get("DXY (Dólar)", {}), market_data.get("Bonos 10Y", {})
@@ -128,7 +128,7 @@ def render_live_market():
     render_mobile_card(col4, "Bono 10Y", bond, False)
     st.markdown("---")
 
-    # Gráficos Técnicos
+    # 3. Gráficos Técnicos
     st.subheader(f"📈 Análisis Cuantitativo [{selected_timeframe}] & Gráficos")
     asset_choice = st.selectbox("Seleccione activo para análisis técnico detallado:", ["Bitcoin", "Oro"], key="asset_live_choice")
 
@@ -143,6 +143,10 @@ def render_live_market():
         current_ema50 = df_asset["EMA_50"].iloc[-1]
         current_ema200 = df_asset["EMA_200"].iloc[-1]
         current_rsi = df_asset["RSI"].iloc[-1]
+        
+        selected_info = btc if asset_choice == "Bitcoin" else gold
+        p_low, p_high, p_vol = selected_info.get("low", 0), selected_info.get("high", 0), selected_info.get("volume", 0)
+
         sentiment_score = int(np.clip(current_rsi * 1.2, 10, 90))
         sentiment_label = "Miedo Extremo" if sentiment_score < 25 else ("Miedo" if sentiment_score < 45 else ("Neutral" if sentiment_score < 55 else ("Codicia" if sentiment_score < 75 else "Codicia Extrema")))
 
@@ -152,6 +156,15 @@ def render_live_market():
         m3.metric("EMA 200", f"${current_ema200:,.2f}")
         m4.metric("Sentimiento", f"{sentiment_score} ({sentiment_label})")
 
+        with st.expander(f"📊 Ver Estadísticas Avanzadas y Datos de Mercado [{asset_choice}]"):
+            e_col1, e_col2, e_col3 = st.columns(3)
+            e_col1.metric("Mínimo del Periodo", f"${p_low:,.2f}")
+            e_col2.metric("Máximo del Periodo", f"${p_high:,.2f}")
+            e_col3.metric("Volumen del Periodo", f"${p_vol:,.0f}" if p_vol > 0 else "N/A")
+            if asset_choice == "Bitcoin":
+                st.markdown("* **Suministro Circulante:** `20.06M BTC` / Máximo: `21.00M BTC`")
+                st.markdown("* **Dominancia de Mercado:** `~58.61%` | **Clasificación:** `#1`")
+
         fig = go.Figure()
         fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
@@ -159,8 +172,48 @@ def render_live_market():
         fig.update_layout(title=f"Acción del Precio [{selected_timeframe}] - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
-    # NUEVO: MATRIZ DE SINCRONIZACIÓN INSTITUCIONAL (SMART MONEY)
     st.markdown("---")
+
+    # 4. TRADUCTOR DEL MERCADO EN VIVO (RESTAURADO)
+    st.subheader(f"📝 Traductor del Mercado — {asset_choice} ({selected_timeframe})")
+    
+    dxy_chg = dxy.get('change', 0)
+    bond_chg = bond.get('change', 0)
+
+    dxy_status = "BUENO. Inyecta liquidez institucional a los activos de riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Fortaleza del Dólar ejerce presión bajista general."
+    bond_status = "DESFAVORABLE para activos de riesgo." if bond_chg > 0 else "FAVORABLE para la valoración de activos."
+    
+    if current_rsi > 70: rsi_context = f"SOBRECOMPRADO (RSI en {current_rsi:.2f}). Alerta máxima de agotamiento alcista en escala {selected_timeframe}."
+    elif current_rsi < 30: rsi_context = f"SOBREVENDIDO (RSI en {current_rsi:.2f}). Zona óptima de posible rebote técnico institucional."
+    elif current_rsi > 50: rsi_context = f"NEUTRAL-ALCISTA (RSI en {current_rsi:.2f}). Impulso comprador dominante."
+    else: rsi_context = f"NEUTRAL-BAJISTA (RSI en {current_rsi:.2f}). Presión vendedora controlada."
+
+    if current_ema50 > current_ema200: ema_structure = "Tendencia Estructural Alcista (EMA 50 por encima de la EMA 200)."
+    else: ema_structure = "Tendencia Estructural Bajista o de Acumulación (EMA 50 por debajo de la EMA 200)."
+
+    if current_close > current_ema50: price_battle = f"Precio cotizando por encima de la EMA 50 (${current_ema50:,.2f}). Soporte dinámico activo."
+    else: price_battle = f"Precio atrapado por debajo de la EMA 50 (${current_ema50:,.2f}). Resistencia activa."
+
+    range_position = "cerca de los máximos del rango" if (p_high - p_low) > 0 and ((current_close - p_low) / (p_high - p_low)) > 0.7 else "en zona media o baja del rango"
+
+    st.markdown(f"* **Macroeconomía (Dólar):** El Dólar varía un ({dxy_chg:.2f}%). {dxy_status}")
+    st.markdown(f"* **Deuda Soberana (Bonos 10Y):** Rendimiento varía un ({bond_chg:.2f}%). {bond_status}")
+    st.markdown(f"* **Inercia del Impulso (RSI 14):** {rsi_context}")
+    st.markdown(f"* **Estructura de Medias Móviles:** {ema_structure}")
+    st.markdown(f"* **Estadísticas de Rango [{selected_timeframe}]:** El activo cotiza **{range_position}** (Mínimo: `${p_low:,.2f}` | Máximo: `${p_high:,.2f}`).")
+    st.markdown(f"* **Batalla Técnica del Precio:** {price_battle}")
+
+    # Algoritmo de Confluencia
+    if current_close > current_ema50 and current_rsi < 70 and current_ema50 > current_ema200:
+        st.success("🟢 **ESTADO VERDE:** Alta confluencia alcista institucional. Alineación perfecta entre precio, medias y momentum.")
+    elif current_close < current_ema50 and current_rsi > 30:
+        st.warning("🟡 **ESTADO AMARILLO:** Señales divididas o mercado en rango. Mantén disciplina y gestión de riesgo.")
+    else:
+        st.error("🔴 **ESTADO ROJO:** Alta volatilidad o conflicto técnico severo. Riesgo elevado de trampa de mercado.")
+
+    st.markdown("---")
+
+    # 5. MATRIZ DE SINCRONIZACIÓN INSTITUCIONAL (SMART MONEY)
     st.subheader(f"🧩 Matriz de Sincronización Institucional (ICT) - {asset_choice}")
     st.caption("Esta matriz escanea múltiples temporalidades simultáneamente para detectar dónde están las trampas de liquidez.")
     
@@ -172,12 +225,9 @@ def render_live_market():
             e50 = df['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
             r = calculate_rsi(df['Close']).iloc[-1]
             trend = "Alcista 🟢" if c > e50 else "Bajista 🔴"
-            if r > 70:
-                liq = f"🔥 Sobrecomprado ({r:.1f}) - Posible trampa alcista"
-            elif r < 30:
-                liq = f"🩸 Sobrevendido ({r:.1f}) - Caza de Stop Loss (Zona de Compra)"
-            else:
-                liq = f"⚖️ Neutral ({r:.1f}) - Acumulación de liquidez"
+            if r > 70: liq = f"🔥 Sobrecomprado ({r:.1f}) - Posible trampa alcista"
+            elif r < 30: liq = f"🩸 Sobrevendido ({r:.1f}) - Caza de Stop Loss (Zona de Compra)"
+            else: liq = f"⚖️ Neutral ({r:.1f}) - Acumulación de liquidez"
             return f"| {timeframe} | {role} | {trend} | {liq} |"
 
         table_md = "| Temporalidad | Rol en la Estrategia (ICT) | Tendencia (EMA 50) | Estado de Liquidez (RSI) |\n"
@@ -189,8 +239,6 @@ def render_live_market():
         st.markdown(table_md)
     else:
         st.info("Cargando datos institucionales...")
-
-    st.markdown("---")
 
 # Ejecutar el fragmento en vivo
 render_live_market()
