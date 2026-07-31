@@ -10,15 +10,15 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.5", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.6", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.5")
-st.caption("Panel Cuantitativo Ultra-Rápido | Sin Retrasos y Conectado a la Nube")
+st.title("📊 Terminal Financiera Institucional v5.6")
+st.caption("Panel Cuantitativo Ultra-Rápido | Números Optimizados para Móvil")
 st.markdown("---")
 
 # ==========================================
-# FUNCIONES MATEMÁTICAS Y DE DATOS (OPTIMIZADAS PARA VELOCIDAD)
+# FUNCIONES MATEMÁTICAS Y DE DATOS (VELOCIDAD INSTANTÁNEA)
 # ==========================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -29,7 +29,7 @@ def calculate_rsi(series, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-@st.cache_data(ttl=15) # Actualización rápida en tiempo real sin congelar la app
+@st.cache_data(ttl=15)
 def load_data():
     tickers = {
         "Bitcoin": "BTC-USD",
@@ -82,7 +82,7 @@ st.caption("Regla institucional: Nunca comprometas liquidez sin medir el impacto
 st.markdown("---")
 
 # ==========================================
-# 2. PANEL MACROECONÓMICO E INTERMERCADOS (INSTANTÁNEO)
+# 2. PANEL MACROECONÓMICO E INTERMERCADOS (NÚMEROS AGRANDADOS)
 # ==========================================
 st.subheader("🌐 Panel Intermercados y Macroeconomía")
 
@@ -97,10 +97,10 @@ def render_mobile_card(col, title, price, change, is_currency=True):
     color = "#28a745" if change >= 0 else "#dc3545"
     sign = "+" if change >= 0 else ""
     col.markdown(f"""
-    <div style="background-color: #111827; padding: 6px; border-radius: 6px; border: 1px solid #1f2937; text-align: center;">
-        <div style="font-size: 10px; color: #9ca3af; margin-bottom: 2px;">{title}</div>
-        <div style="font-size: 11px; font-weight: bold; color: #f3f4f6; white-space: nowrap;">{p_str}</div>
-        <div style="font-size: 9px; color: {color}; font-weight: 600;">{sign}{change:.2f}%</div>
+    <div style="background-color: #111827; padding: 8px; border-radius: 6px; border: 1px solid #1f2937; text-align: center;">
+        <div style="font-size: 11px; color: #9ca3af; margin-bottom: 3px;">{title}</div>
+        <div style="font-size: 14px; font-weight: bold; color: #f3f4f6; white-space: nowrap;">{p_str}</div>
+        <div style="font-size: 10px; color: {color}; font-weight: 600; margin-top: 2px;">{sign}{change:.2f}%</div>
     </div>
     """, unsafe_allow_html=True)
 
