@@ -11,7 +11,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.35", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v5.36", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # ==========================================
@@ -85,14 +85,14 @@ modo_app = st.sidebar.radio("Selecciona tu área de trabajo:", [
     "🎮 Simulador Completo (Práctica)"
 ])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v5.35")
+st.sidebar.caption("Oculoos Trading v5.36")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal (Operación Real)":
     
-    st.title("👁️ Oculoos Trading v5.35 | Terminal de Operación")
+    st.title("👁️ Oculoos Trading v5.36 | Terminal de Operación")
     st.caption("Flujo Institucional, Gestión de Riesgo y Registro en Nube")
     st.markdown("---")
 
@@ -302,59 +302,69 @@ if modo_app == "📊 Terminal Principal (Operación Real)":
 
 
 # =====================================================================
-# MODO 2: SIMULADOR DE PRÁCTICA (ENTORNO SANDBOX COMPLETO Y OCO)
+# MODO 2: SIMULADOR DE PRÁCTICA COMPLETO CON GRÁFICO EN VIVO
 # =====================================================================
 elif modo_app == "🎮 Simulador Completo (Práctica)":
     
     st.title("🎮 Simulador de Operaciones en Vivo")
-    st.caption("Practica ambas estrategias con precios reales del mercado sin arriesgar un centavo.")
+    st.caption("Practica ambas estrategias con precios y gráficos reales del mercado sin arriesgar un centavo.")
     st.markdown("---")
 
-    # Inicialización de variables de estado del simulador
-    if 'sim_estado' not in st.session_state:
-        st.session_state.sim_estado = 'INACTIVO' # INACTIVO, ABIERTO, FASE1_COMPLETADA, CERRADO_OCO
-    if 'sim_balance' not in st.session_state:
-        st.session_state.sim_balance = 10000.0 
-    if 'sim_pnl_historico' not in st.session_state:
-        st.session_state.sim_pnl_historico = 0.0
+    # Inicialización de variables
+    if 'sim_estado' not in st.session_state: st.session_state.sim_estado = 'INACTIVO'
+    if 'sim_balance' not in st.session_state: st.session_state.sim_balance = 10000.0 
+    if 'sim_pnl_historico' not in st.session_state: st.session_state.sim_pnl_historico = 0.0
 
     # Panel de Saldo
     st.markdown(f"### 💰 Saldo de Práctica: **${st.session_state.sim_balance:,.2f} USD**")
     st.markdown(f"Ganancia/Pérdida Acumulada: **${st.session_state.sim_pnl_historico:,.2f} USD**")
     st.markdown("---")
 
-    # PANTALLA DE RESULTADO AUTOMÁTICO (OCO)
+    # RESULTADO OCO
     if st.session_state.sim_estado == 'CERRADO_OCO':
         st.success(st.session_state.get('sim_mensaje_oco', 'Orden ejecutada automáticamente.'))
         if st.button("🔄 Entendido, volver al simulador"):
             st.session_state.sim_estado = 'INACTIVO'
             st.rerun()
 
-    # Lógica cuando NO hay operación abierta
+    # CONFIGURAR POSICIÓN
     elif st.session_state.sim_estado == 'INACTIVO':
         st.subheader("1️⃣ Configurar y Abrir Posición Virtual")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         with c1: s_asset = st.selectbox("Activo:", ["Bitcoin", "Oro"])
         with c2: s_dir = st.selectbox("Dirección:", ["Compra (Long)", "Venta (Short)"])
         with c3: s_monto = st.number_input("Inversión ($ USD):", min_value=10.0, max_value=st.session_state.sim_balance, value=500.0, step=50.0)
+        with c4: s_sl_pct = st.number_input("Distancia de Riesgo / SL (%):", value=5.0, step=0.5)
 
         precio_actual = market_data_init.get(s_asset, {}).get('price', 60000.0)
         if precio_actual == 0: precio_actual = 60000.0
         
-        st.info(f"El precio actual de **{s_asset}** en el mercado es de **${precio_actual:,.2f}**")
+        st.info(f"Precio actual de **{s_asset}**: **${precio_actual:,.2f}**")
 
         st.markdown("### Selecciona tu Estrategia a Simular")
         s_estrategia = st.radio("Método de Operación:", [
-            "✋ Estrategia Manual (Tú vigilarás el PnL y harás los Cierres Parciales con botones)",
+            "✋ Estrategia Manual (Tú vigilarás el Gráfico y harás los Cierres Parciales con botones)",
             "🤖 Estrategia Automática (Orden OCO: Configuras el Piso y Techo y la App cierra sola)"
         ])
+
+        # Cálculos de Metas Automáticas basados en el riesgo elegido
+        if "Compra" in s_dir:
+            sl_calc = precio_actual * (1 - (s_sl_pct / 100))
+            dist = precio_actual - sl_calc
+            tp1_calc = precio_actual + dist
+            tp2_calc = precio_actual + (dist * 2)
+        else:
+            sl_calc = precio_actual * (1 + (s_sl_pct / 100))
+            dist = sl_calc - precio_actual
+            tp1_calc = precio_actual - dist
+            tp2_calc = precio_actual - (dist * 2)
 
         s_tp, s_sl = 0.0, 0.0
         if "Automática" in s_estrategia:
             st.markdown("#### Define los límites automáticos de Binance:")
             col_oco1, col_oco2 = st.columns(2)
-            with col_oco1: s_tp = st.number_input("Techo (Take Profit $):", value=precio_actual * 1.05)
-            with col_oco2: s_sl = st.number_input("Piso (Stop Loss $):", value=precio_actual * 0.95)
+            with col_oco1: s_tp = st.number_input("Techo (Take Profit $):", value=tp2_calc)
+            with col_oco2: s_sl = st.number_input("Piso (Stop Loss $):", value=sl_calc)
 
         if st.button("🚀 Ejecutar Operación de Práctica"):
             st.session_state.sim_estado = 'ABIERTO'
@@ -367,20 +377,25 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
             st.session_state.sim_estrategia = s_estrategia
             st.session_state.sim_tp = s_tp
             st.session_state.sim_sl = s_sl
+            # Guardamos las metas sugeridas para dibujarlas en el gráfico
+            st.session_state.sim_tp1_calc = tp1_calc
+            st.session_state.sim_tp2_calc = tp2_calc
+            st.session_state.sim_sl_calc = sl_calc
             st.rerun()
 
-    # Lógica cuando SÍ hay una operación abierta (En vivo)
+    # VIGILANCIA (EN VIVO)
     else:
-        st.subheader("2️⃣ Vigilancia de Operación Activa")
+        st.subheader("2️⃣ Vigilancia de Operación Activa y Gráfico")
         
-        @st.fragment(run_every=1) # Se actualiza solo cada segundo para vigilar la OCO y el PnL
+        @st.fragment(run_every=1)
         def ejecutar_simulador_vivo():
             if st.session_state.get('sim_estado', 'INACTIVO') not in ['ABIERTO', 'FASE1_COMPLETADA']:
                 st.rerun()
 
-            # Extracción segura de datos con .get() para evitar AttributeError
             s_asset = st.session_state.get('sim_activo', 'Bitcoin')
-            m_data, _ = load_data("15 Minutos")
+            
+            # Cargar datos para el precio y el gráfico del simulador
+            m_data, m_history = load_data("15 Minutos")
             precio_actual = m_data.get(s_asset, {}).get('price', 60000.0)
             if precio_actual == 0: precio_actual = 60000.0
 
@@ -388,27 +403,24 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
             monto_vivo = st.session_state.get('sim_monto_actual', 0.0)
             direccion = st.session_state.get('sim_dir', 'Compra (Long)')
             estrategia = st.session_state.get('sim_estrategia', 'Manual')
+            estado_actual = st.session_state.get('sim_estado', 'ABIERTO')
+            
+            tp1_calc = st.session_state.get('sim_tp1_calc', 0.0)
+            tp2_calc = st.session_state.get('sim_tp2_calc', 0.0)
+            sl_calc = st.session_state.get('sim_sl_calc', 0.0)
 
-            # ----------------------------------------------------
-            # MOTOR DE VIGILANCIA AUTOMÁTICA (OCO)
-            # ----------------------------------------------------
+            # MOTOR OCO
             if "Automática" in estrategia:
                 tp = st.session_state.get('sim_tp', 0.0)
                 sl = st.session_state.get('sim_sl', 0.0)
-                auto_close = False
-                razon = ""
-                precio_cierre = 0.0
+                auto_close, razon, precio_cierre = False, "", 0.0
 
                 if "Compra" in direccion:
-                    if precio_actual >= tp:
-                        auto_close, razon, precio_cierre = True, "Take Profit (Meta alcanzada)", tp
-                    elif precio_actual <= sl:
-                        auto_close, razon, precio_cierre = True, "Stop Loss (Pérdida detenida)", sl
-                else: # Short
-                    if precio_actual <= tp:
-                        auto_close, razon, precio_cierre = True, "Take Profit (Meta alcanzada)", tp
-                    elif precio_actual >= sl:
-                        auto_close, razon, precio_cierre = True, "Stop Loss (Pérdida detenida)", sl
+                    if precio_actual >= tp: auto_close, razon, precio_cierre = True, "Take Profit", tp
+                    elif precio_actual <= sl: auto_close, razon, precio_cierre = True, "Stop Loss", sl
+                else: 
+                    if precio_actual <= tp: auto_close, razon, precio_cierre = True, "Take Profit", tp
+                    elif precio_actual >= sl: auto_close, razon, precio_cierre = True, "Stop Loss", sl
 
                 if auto_close:
                     if "Compra" in direccion: pnl_pct = ((precio_cierre - p_entrada) / p_entrada) * 100
@@ -417,13 +429,11 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
                     
                     st.session_state.sim_balance += pnl_usd
                     st.session_state.sim_pnl_historico += pnl_usd
-                    st.session_state.sim_mensaje_oco = f"🤖 **¡ORDEN OCO EJECUTADA!** La operación se cerró automáticamente por **{razon}** al tocar los ${precio_cierre:,.2f}, generando un PnL de **${pnl_usd:,.2f} USD**."
+                    st.session_state.sim_mensaje_oco = f"🤖 **¡ORDEN OCO EJECUTADA!** Cierre por **{razon}** a ${precio_cierre:,.2f}. PnL: **${pnl_usd:,.2f} USD**."
                     st.session_state.sim_estado = 'CERRADO_OCO'
                     st.rerun()
 
-            # ----------------------------------------------------
             # PnL FLOTANTE
-            # ----------------------------------------------------
             if "Compra" in direccion:
                 pnl_pct = ((precio_actual - p_entrada) / p_entrada) * 100
             else:
@@ -431,33 +441,59 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
                 
             pnl_usd = monto_vivo * (pnl_pct / 100)
 
-            # ----------------------------------------------------
-            # INTERFAZ DEL TABLERO
-            # ----------------------------------------------------
+            # INTERFAZ SUPERIOR
             dash1, dash2, dash3, dash4 = st.columns(4)
             dash1.metric("Activo", s_asset, direccion)
             dash2.metric("Precio Entrada", f"${p_entrada:,.2f}")
             dash3.metric("Precio Actual", f"${precio_actual:,.2f}")
-            dash4.metric("PnL Flotante (Vivo)", f"${pnl_usd:,.2f} USD", f"{pnl_pct:.2f}%")
+            dash4.metric(f"PnL Flotante (Sobre ${monto_vivo:,.2f})", f"${pnl_usd:,.2f} USD", f"{pnl_pct:.2f}%")
+
+            # AVISOS DE PISO Y TECHO DINÁMICOS
+            st.markdown("---")
+            if estado_actual == 'FASE1_COMPLETADA':
+                st.info(f"🎯 **NUEVOS PARÁMETROS ACTIVOS (50% Restante):** Tu **Nuevo Piso (Break-Even)** es tu entrada en `${p_entrada:,.2f}`. Tu **Nuevo Techo (Meta Final)** es `${tp2_calc:,.2f}`.")
+            elif "Manual" in estrategia:
+                st.info(f"📊 **TUS METAS ACTUALES:** Tu **Piso (Stop Loss)** está en `${sl_calc:,.2f}` y tu **Techo (Meta 1)** está en `${tp1_calc:,.2f}`.")
+
+            # GRÁFICO EN VIVO CON LÍNEAS
+            if s_asset in m_history:
+                df_sim = m_history[s_asset].tail(80) # Mostrar historial reciente
+                fig_sim = go.Figure(data=[go.Candlestick(x=df_sim.index, open=df_sim["Open"], high=df_sim["High"], low=df_sim["Low"], close=df_sim["Close"], name="Precio")])
+                
+                # Dibujar Entrada (Blanco)
+                fig_sim.add_hline(y=p_entrada, line_dash="dot", line_color="white", annotation_text="Entrada", annotation_position="bottom right")
+                
+                # Dibujar Metas según estado
+                if "Automática" in estrategia:
+                    fig_sim.add_hline(y=st.session_state.get('sim_tp', 0.0), line_dash="dash", line_color="green", annotation_text="Techo (OCO)")
+                    fig_sim.add_hline(y=st.session_state.get('sim_sl', 0.0), line_dash="dash", line_color="red", annotation_text="Piso (OCO)")
+                else:
+                    if estado_actual == 'ABIERTO':
+                        fig_sim.add_hline(y=tp1_calc, line_dash="dash", line_color="green", annotation_text="Meta 1 (50%)")
+                        fig_sim.add_hline(y=sl_calc, line_dash="dash", line_color="red", annotation_text="Stop Loss")
+                    elif estado_actual == 'FASE1_COMPLETADA':
+                        fig_sim.add_hline(y=tp2_calc, line_dash="dash", line_color="green", annotation_text="Meta Final")
+                        # La línea de Break-Even ya está marcada por la línea blanca de Entrada, pero podemos resaltarla:
+                        fig_sim.add_hline(y=p_entrada, line_width=2, line_color="blue", annotation_text="Break-Even (Piso)")
+                
+                fig_sim.update_layout(title="Radar de Persecución (15 Minutos)", template="plotly_dark", height=400, margin=dict(l=20, r=20, t=30, b=10))
+                st.plotly_chart(fig_sim, use_container_width=True)
 
             if "Automática" in estrategia:
-                st.info(f"🤖 **Modo Automático Activado:** La plataforma está vigilando el precio por ti. Se cerrará sola si toca tu Techo (${st.session_state.get('sim_tp', 0.0):,.2f}) o tu Piso (${st.session_state.get('sim_sl', 0.0):,.2f}).")
+                st.warning("🤖 **Modo Automático:** Binance está controlando la operación. Relájate.")
             else:
                 sim_pnl_realizado = st.session_state.get('sim_pnl_realizado', 0.0)
                 if sim_pnl_realizado != 0:
-                    st.success(f"💸 Ganancia ya asegurada (Fase 1): **${sim_pnl_realizado:,.2f} USD**")
+                    st.success(f"💸 ¡Mitad del trabajo hecho! Ganancia asegurada en tu bolsillo: **${sim_pnl_realizado:,.2f} USD**")
 
             st.markdown("---")
             st.subheader("⚡ Acciones del Operador")
             
             col_acc1, col_acc2 = st.columns(2)
-            
             with col_acc1:
                 if "Manual" in estrategia:
-                    if st.session_state.get('sim_estado', 'INACTIVO') == 'ABIERTO':
-                        st.markdown("### Estrategia de Cierre Parcial")
-                        st.caption("Si ya tocaste tu Meta 1, presiona aquí.")
-                        if st.button("✅ Vender 50% y Mover a Break-Even"):
+                    if estado_actual == 'ABIERTO':
+                        if st.button("✅ Vender 50% y Mover a Break-Even (Activar Fase 2)"):
                             pnl_mitad = pnl_usd / 2
                             st.session_state.sim_pnl_realizado = pnl_mitad
                             st.session_state.sim_monto_actual = monto_vivo / 2
@@ -466,14 +502,11 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
                             st.session_state.sim_estado = 'FASE1_COMPLETADA'
                             st.rerun()
                     else:
-                        st.info("✅ Ya aseguraste el 50% de esta operación y tu riesgo actual es CERO. Persigue el resto.")
+                        st.info("✅ Ya aseguraste el 50% y tu monto de riesgo bajó a la mitad. Persigue el precio hasta la Meta Final.")
                 else:
-                    st.markdown("### Estrategia Automática")
-                    st.caption("Los botones manuales están deshabilitados porque Binance está controlando la operación.")
+                    st.caption("Botones manuales deshabilitados por orden OCO.")
 
             with col_acc2:
-                st.markdown("### Cierre de Emergencia")
-                st.caption("Cierra la operación manualmente sin importar la estrategia.")
                 if st.button("🛑 Cerrar Posición Totalmente y Salir"):
                     st.session_state.sim_balance += pnl_usd
                     st.session_state.sim_pnl_historico += pnl_usd
