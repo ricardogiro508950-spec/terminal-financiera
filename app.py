@@ -11,8 +11,35 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.37", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v5.38", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
+
+# ==========================================
+# INICIALIZACIÓN DE VARIABLES Y CALLBACKS
+# ==========================================
+if 'audit_cap' not in st.session_state: st.session_state.audit_cap = 1000.0
+if 'audit_rsk' not in st.session_state: st.session_state.audit_rsk = 1.0
+if 'audit_sl' not in st.session_state: st.session_state.audit_sl = 5.0
+if 'monto_inv_term' not in st.session_state: st.session_state.monto_inv_term = 200.0
+
+if 'sim_balance' not in st.session_state: st.session_state.sim_balance = 10000.0 
+if 'sim_rsk_pct' not in st.session_state: st.session_state.sim_rsk_pct = 1.0
+if 'sim_sl_pct' not in st.session_state: st.session_state.sim_sl_pct = 5.0
+if 'monto_inv_sim' not in st.session_state: st.session_state.monto_inv_sim = 2000.0 
+
+def update_monto_term():
+    cap = st.session_state.audit_cap
+    rsk = st.session_state.audit_rsk
+    sl = st.session_state.audit_sl
+    if sl > 0:
+        st.session_state.monto_inv_term = (cap * (rsk / 100)) / (sl / 100)
+
+def update_monto_sim():
+    bal = st.session_state.get('sim_balance', 10000.0)
+    rsk = st.session_state.sim_rsk_pct
+    sl = st.session_state.sim_sl_pct
+    if sl > 0:
+        st.session_state.monto_inv_sim = (bal * (rsk / 100)) / (sl / 100)
 
 # ==========================================
 # FUNCIONES MATEMÁTICAS Y DE DATOS
@@ -85,14 +112,14 @@ modo_app = st.sidebar.radio("Selecciona tu área de trabajo:", [
     "🎮 Simulador Completo (Práctica)"
 ])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v5.37")
+st.sidebar.caption("Oculoos Trading v5.38")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal (Operación Real)":
     
-    st.title("👁️ Oculoos Trading v5.37 | Terminal de Operación")
+    st.title("👁️ Oculoos Trading v5.38 | Terminal de Operación")
     st.caption("Flujo Institucional, Gestión de Riesgo y Registro en Nube")
     st.markdown("---")
 
@@ -100,16 +127,19 @@ if modo_app == "📊 Terminal Principal (Operación Real)":
     st.subheader("🛡️ PASO 1: Auditoría de Capital y Gestión de Riesgo")
     st.caption("Regla Institucional: Define tu pérdida máxima antes de mirar los gráficos.")
     ac_col1, ac_col2, ac_col3 = st.columns(3)
-    with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, value=1000.0, step=100.0, key="audit_cap")
-    with ac_col2: riesgo_pct = st.slider("Riesgo por Operación (%)", 0.5, 5.0, 1.0, 0.5, key="audit_rsk")
-    with ac_col3: stop_loss_pct = st.number_input("Stop-Loss Distancia (%)", min_value=0.1, value=5.0, step=0.5, key="audit_sl")
+    
+    with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, step=100.0, key="audit_cap", on_change=update_monto_term)
+    with ac_col2: riesgo_pct = st.slider("Riesgo por Operación (%)", 0.5, 5.0, step=0.1, key="audit_rsk", on_change=update_monto_term)
+    with ac_col3: stop_loss_pct = st.number_input("Stop-Loss Distancia (%)", min_value=0.1, step=0.5, key="audit_sl", on_change=update_monto_term)
 
     riesgo_usd = capital * (riesgo_pct / 100)
-    tamano_posicion = riesgo_usd / (stop_loss_pct / 100) if stop_loss_pct > 0 else 0
 
     r_col1, r_col2 = st.columns(2)
-    with r_col1: st.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
-    with r_col2: st.success(f"**Compra Máxima Permitida (Tamaño de Posición):** ${tamano_posicion:.2f} USD")
+    with r_col1: 
+        st.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
+    with r_col2: 
+        tamano_posicion = st.number_input("✅ Compra Máxima Permitida (Inversión USD) [Automático o Manual]:", min_value=1.0, step=10.0, key="monto_inv_term")
+        
     st.markdown("---")
 
     st.subheader("🎛️ Configuración de Simulaciones de Entrada")
@@ -137,10 +167,10 @@ if modo_app == "📊 Terminal Principal (Operación Real)":
         s1_c1, s1_c2, s1_c3 = st.columns(3)
         with s1_c1:
             st.metric("1️⃣ Monto de Operación", f"${tamano_posicion:,.2f} USD")
-            st.caption("Tamaño dictado por tu riesgo.")
+            st.caption("Tamaño dictado por tu riesgo o manual.")
         with s1_c2:
             st.metric("2️⃣ Stop Loss (Alarma Piso)", f"${sl_calculado:,.2f}")
-            st.caption(f"Límite de pérdida de ${riesgo_usd:.2f}.")
+            st.caption(f"Límite de pérdida protegida.")
         with s1_c3:
             st.metric("3️⃣ Take Profit (Meta Techo)", f"${meta_2r:,.2f}")
             st.caption("Objetivo Ratio 1:2.")
@@ -310,10 +340,7 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
     st.caption("Practica ambas estrategias con precios y gráficos reales del mercado sin arriesgar un centavo.")
     st.markdown("---")
 
-    # Inicialización de variables
     if 'sim_estado' not in st.session_state: st.session_state.sim_estado = 'INACTIVO'
-    if 'sim_balance' not in st.session_state: st.session_state.sim_balance = 10000.0 
-    if 'sim_pnl_historico' not in st.session_state: st.session_state.sim_pnl_historico = 0.0
 
     # Panel de Saldo
     st.markdown(f"### 💰 Saldo de Práctica: **${st.session_state.sim_balance:,.2f} USD**")
@@ -334,20 +361,16 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
         c1, c2, c3, c4 = st.columns(4)
         with c1: s_asset = st.selectbox("Activo:", ["Bitcoin", "Oro"])
         with c2: s_dir = st.selectbox("Dirección:", ["Compra (Long)", "Venta (Short)"])
-        with c3: s_riesgo_pct = st.number_input("Riesgo sobre Saldo (%)", min_value=0.1, value=1.0, step=0.1)
-        with c4: s_sl_pct = st.number_input("Distancia de SL (%):", min_value=0.1, value=5.0, step=0.5)
+        with c3: s_riesgo_pct = st.number_input("Riesgo sobre Saldo (%)", min_value=0.1, step=0.1, key="sim_rsk_pct", on_change=update_monto_sim)
+        with c4: s_sl_pct = st.number_input("Distancia de SL (%):", min_value=0.1, step=0.5, key="sim_sl_pct", on_change=update_monto_sim)
 
         precio_actual = market_data_init.get(s_asset, {}).get('price', 60000.0)
         if precio_actual == 0: precio_actual = 60000.0
         
-        # Cálculo automático de la inversión recomendada basada en el % de riesgo
         riesgo_max_usd = st.session_state.sim_balance * (s_riesgo_pct / 100)
-        inversion_calc = riesgo_max_usd / (s_sl_pct / 100) if s_sl_pct > 0 else 0.0
-
-        st.info(f"💡 Precio actual de **{s_asset}**: **${precio_actual:,.2f}**. | Sugerencia Institucional: Arriesgando el **{s_riesgo_pct:.1f}%**, tu posición ideal es **${inversion_calc:,.2f}**.")
+        st.info(f"💡 Precio actual de **{s_asset}**: **${precio_actual:,.2f}**. | Sugerencia Institucional: Arriesgando el **{s_riesgo_pct:.1f}%**, tu pérdida sería **${riesgo_max_usd:,.2f}**.")
         
-        # El input se llena con el cálculo automático, pero el usuario puede editarlo libremente
-        s_monto = st.number_input("Inversión a Ejecutar ($ USD) [Calculado automático, pero modificable]:", min_value=1.0, max_value=float(st.session_state.sim_balance), value=float(inversion_calc), step=50.0)
+        s_monto = st.number_input("💸 Inversión a Ejecutar ($ USD) [Calculado automático, pero modificable]:", min_value=1.0, step=50.0, key="monto_inv_sim")
 
         st.markdown("### Selecciona tu Estrategia a Simular")
         s_estrategia = st.radio("Método de Operación:", [
@@ -355,7 +378,6 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
             "🤖 Estrategia Automática (Orden OCO: Configuras el Piso y Techo y la App cierra sola)"
         ])
 
-        # Cálculos de Metas Automáticas basados en la distancia elegida
         if "Compra" in s_dir:
             sl_calc = precio_actual * (1 - (s_sl_pct / 100))
             dist = precio_actual - sl_calc
@@ -401,7 +423,6 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
 
             s_asset = st.session_state.get('sim_activo', 'Bitcoin')
             
-            # Cargar datos para el precio y el gráfico del simulador
             m_data, m_history = load_data("15 Minutos")
             precio_actual = m_data.get(s_asset, {}).get('price', 60000.0)
             if precio_actual == 0: precio_actual = 60000.0
@@ -455,22 +476,20 @@ elif modo_app == "🎮 Simulador Completo (Práctica)":
             dash3.metric("Precio Actual", f"${precio_actual:,.2f}")
             dash4.metric(f"PnL Flotante (Sobre ${monto_vivo:,.2f})", f"${pnl_usd:,.2f} USD", f"{pnl_pct:.2f}%")
 
-            # AVISOS DE PISO Y TECHO DINÁMICOS
+            # AVISOS DE PISO Y TECHO
             st.markdown("---")
             if estado_actual == 'FASE1_COMPLETADA':
                 st.info(f"🎯 **NUEVOS PARÁMETROS ACTIVOS (50% Restante):** Tu **Nuevo Piso (Break-Even)** es tu entrada en `${p_entrada:,.2f}`. Tu **Nuevo Techo (Meta Final)** es `${tp2_calc:,.2f}`.")
             elif "Manual" in estrategia:
                 st.info(f"📊 **TUS METAS ACTUALES:** Tu **Piso (Stop Loss)** está en `${sl_calc:,.2f}` y tu **Techo (Meta 1)** está en `${tp1_calc:,.2f}`.")
 
-            # GRÁFICO EN VIVO CON LÍNEAS
+            # GRÁFICO EN VIVO
             if s_asset in m_history:
                 df_sim = m_history[s_asset].tail(80) 
                 fig_sim = go.Figure(data=[go.Candlestick(x=df_sim.index, open=df_sim["Open"], high=df_sim["High"], low=df_sim["Low"], close=df_sim["Close"], name="Precio")])
                 
-                # Dibujar Entrada
                 fig_sim.add_hline(y=p_entrada, line_dash="dot", line_color="white", annotation_text="Entrada", annotation_position="bottom right")
                 
-                # Dibujar Metas según estado
                 if "Automática" in estrategia:
                     fig_sim.add_hline(y=st.session_state.get('sim_tp', 0.0), line_dash="dash", line_color="green", annotation_text="Techo (OCO)")
                     fig_sim.add_hline(y=st.session_state.get('sim_sl', 0.0), line_dash="dash", line_color="red", annotation_text="Piso (OCO)")
