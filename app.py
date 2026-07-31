@@ -11,15 +11,15 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.14", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.15", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.14")
-st.caption("Panel Cuantitativo Ultra-Rápido | Traductor Avanzado, Reloj y Nube")
+st.title("📊 Terminal Financiera Institucional v5.15")
+st.caption("Panel Cuantitativo Pro | Selector de Temporalidades, Sentimiento y Nube")
 st.markdown("---")
 
 # ==========================================
-# FUNCIONES MATEMÁTICAS Y DE DATOS
+# FUNCIONES MATEMÁTICAS Y DE DATOS (CON TEMPORALIDADES)
 # ==========================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -31,7 +31,17 @@ def calculate_rsi(series, period=14):
     return 100 - (100 / (1 + rs))
 
 @st.cache_data(ttl=15)
-def load_data():
+def load_data(interval_type):
+    if "1 Hora" in interval_type:
+        period = "1mo"
+        yf_interval = "1h"
+    elif "4 Horas" in interval_type:
+        period = "2mo"
+        yf_interval = "1h"
+    else:
+        period = "6mo"
+        yf_interval = "1d"
+
     tickers = {
         "Bitcoin": "BTC-USD",
         "Oro": "GC=F",
@@ -43,8 +53,16 @@ def load_data():
     for name, ticker in tickers.items():
         try:
             t = yf.Ticker(ticker)
-            df = t.history(period="6mo")
+            df = t.history(period=period, interval=yf_interval)
             if not df.empty:
+                if "4 Horas" in interval_type:
+                    df = df.resample('4h').agg({
+                        'Open': 'first',
+                        'High': 'max',
+                        'Low': 'min',
+                        'Close': 'last',
+                        'Volume': 'sum'
+                    }).dropna()
                 history[name] = df
                 current_price = df["Close"].iloc[-1]
                 prev_price = df["Close"].iloc[-2] if len(df) >= 2 else current_price
@@ -85,8 +103,16 @@ def render_live_market():
 
     st.markdown("---")
 
-    # Cargar datos
-    market_data, market_history = load_data()
+    # Selector de Temporalidad (Intervalos)
+    st.subheader("⚙️ Configuración de Temporalidad (Intervalo de Análisis)")
+    selected_timeframe = st.selectbox(
+        "Selecciona el intervalo temporal de los datos:",
+        ["1 Día (1D)", "1 Hora (1h)", "4 Horas (4h)"],
+        key="global_timeframe"
+    )
+
+    # Cargar datos según temporalidad elegida
+    market_data, market_history = load_data(selected_timeframe)
 
     # 2. Centro de Alertas Institucionales
     st.subheader("🚨 Centro de Alertas Institucionales")
@@ -106,8 +132,9 @@ def render_live_market():
 
     st.markdown("---")
 
-    # 3. Panel Macro
-    st.subheader("🌐 Panel Intermercados y Macroeconomía")
+    # 3. Panel Macro & Métricas Estilo CMC / Binance (Dominancia y Sentimiento)
+    st.subheader("🌐 Panel Intermercados, Dominancia y Sentimiento")
+    
     col1, col2, col3, col4 = st.columns(4)
     btc_info = market_data.get("Bitcoin", {"price": 0, "change": 0})
     gold_info = market_data.get("Oro", {"price": 0, "change": 0})
@@ -137,8 +164,8 @@ def render_live_market():
 
     st.markdown("---")
 
-    # 4. Motor Técnico y Gráficos
-    st.subheader("📈 Análisis Cuantitativo & Gráficos Interactivos")
+    # 4. Motor Técnico y Gráficos (Adaptado a la Temporalidad)
+    st.subheader(f"📈 Análisis Cuantitativo ({selected_timeframe}) & Gráficos")
     asset_choice = st.selectbox("Seleccione activo para análisis técnico detallado:", ["Bitcoin", "Oro"], key="asset_live_choice")
 
     current_close = 0
@@ -157,41 +184,43 @@ def render_live_market():
         current_ema200 = df_asset["EMA_200"].iloc[-1]
         current_rsi = df_asset["RSI"].iloc[-1]
 
-        m1, m2, m3 = st.columns(3)
+        # Simulación dinámica de Miedo y Codicia basada en RSI y cambio
+        sentiment_score = int(np.clip(current_rsi * 1.2, 10, 90))
+        sentiment_label = "Miedo Extremo" if sentiment_score < 25 else ("Miedo" if sentiment_score < 45 else ("Neutral" if sentiment_score < 55 else ("Codicia" if sentiment_score < 75 else "Codicia Extrema")))
+
+        m1, m2, m3, m4 = st.columns(4)
         m1.metric("RSI (14)", f"{current_rsi:.2f}")
         m2.metric("EMA 50", f"${current_ema50:,.2f}")
         m3.metric("EMA 200", f"${current_ema200:,.2f}")
+        m4.metric("Sentimiento (F&G)", f"{sentiment_score} ({sentiment_label})")
 
         fig = go.Figure()
         fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
-        fig.update_layout(title=f"Acción del Precio e Indicadores - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
+        fig.update_layout(title=f"Acción del Precio [{selected_timeframe}] - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
 
-    # 5. TRADUCTOR DEL MERCADO EN VIVO (ENRIQUECIDO CON CONTEXTO TÉCNICO)
-    st.subheader(f"📝 Traductor del Mercado en Vivo — Analizando: {asset_choice}")
+    # 5. TRADUCTOR DEL MERCADO EN VIVO (CONTEXTO TÉCNICO Y PSICOLÓGICO)
+    st.subheader(f"📝 Traductor del Mercado en Vivo — Activo: {asset_choice} | Temporalidad: {selected_timeframe}")
 
     dxy_chg = dxy_info['change']
     bond_chg = bond_info['change']
 
-    # Diagnósticos detallados
     dxy_status = "BUENO. Inyecta liquidez institucional a los activos de riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Fortaleza del Dólar ejerce presión bajista general."
     bond_status = "DESFAVORABLE para activos de riesgo." if bond_chg > 0 else "FAVORABLE para la valoración de activos."
     
-    # RSI Detallado
     if current_rsi > 70:
-        rsi_context = f"SOBRECOMPRADO (RSI en {current_rsi:.2f}). Alerta máxima de agotamiento alcista y posible corrección inminente."
+        rsi_context = f"SOBRECOMPRADO (RSI en {current_rsi:.2f}). Alerta máxima de agotamiento alcista en escala {selected_timeframe}."
     elif current_rsi < 30:
         rsi_context = f"SOBREVENDIDO (RSI en {current_rsi:.2f}). Zona óptima de posible rebote técnico institucional."
     elif current_rsi > 50:
-        rsi_context = f"NEUTRAL-ALCISTA (RSI en {current_rsi:.2f}). Impulso comprador dominante pero sin extremos."
+        rsi_context = f"NEUTRAL-ALCISTA (RSI en {current_rsi:.2f}). Impulso comprador dominante."
     else:
         rsi_context = f"NEUTRAL-BAJISTA (RSI en {current_rsi:.2f}). Presión vendedora controlada."
 
-    # Tendencia Estructural (EMA 50 vs EMA 200) y Precio
     if current_ema50 > current_ema200:
         ema_structure = "Tendencia Macro Alcista (EMA 50 por encima de la EMA 200)."
     else:
@@ -200,12 +229,13 @@ def render_live_market():
     if current_close > current_ema50:
         price_battle = f"Precio cotizando por encima de la EMA 50 (${current_ema50:,.2f}). Soporte dinámico activo."
     else:
-        price_battle = f"Precio atrapado por debajo de la EMA 50 (${current_ema50:,.2f}). Resistencia activa, precaución con largos."
+        price_battle = f"Precio atrapado por debajo de la EMA 50 (${current_ema50:,.2f}). Resistencia activa."
 
     st.markdown(f"* **Macroeconomía (Dólar):** El Dólar varía un ({dxy_chg:.2f}%). {dxy_status}")
     st.markdown(f"* **Deuda Soberana (Bonos 10Y):** Rendimiento varía un ({bond_chg:.2f}%). {bond_status}")
     st.markdown(f"* **Inercia del Impulso (RSI 14):** {rsi_context}")
     st.markdown(f"* **Estructura de Medias Móviles:** {ema_structure}")
+    st.markdown(f"* **Psicología de Mercado (F&G):** Índice en zona de **{sentiment_label}** ({sentiment_score}/100).")
     st.markdown(f"* **Batalla Técnica del Precio:** {price_battle}")
 
     st.markdown("---")
@@ -277,7 +307,7 @@ with st.form("registro_operacion", clear_on_submit=True):
     with col_c:
         nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f")
     with col_d:
-        market_data_temp, _ = load_data()
+        market_data_temp, _ = load_data("1 Día (1D)")
         raw_precio = market_data_temp.get(nuevo_activo, {}).get('price', 60000.0)
         precio_seguro = float(raw_precio) if raw_precio > 0 else (60000.0 if nuevo_activo == "Bitcoin" else 2000.0)
         nuevo_precio = st.number_input("Precio Compra ($)", value=precio_seguro, min_value=0.1, format="%.2f")
@@ -301,7 +331,7 @@ if not df_trades.empty and 'Activo' in df_trades.columns:
     df_trades['Precio_Entrada'] = pd.to_numeric(df_trades['Precio_Entrada'], errors='coerce')
     df_trades['Inversion_Inicial_USD'] = pd.to_numeric(df_trades['Inversion_Inicial_USD'], errors='coerce')
     
-    market_data_temp, _ = load_data()
+    market_data_temp, _ = load_data("1 Día (1D)")
     precios_actuales = {"Bitcoin": market_data_temp.get("Bitcoin", {}).get('price', 0), "Oro": market_data_temp.get("Oro", {}).get('price', 0)}
     df_trades['Precio_Actual_Mercado'] = df_trades['Activo'].map(precios_actuales)
     df_trades['Valor_Actual_USD'] = df_trades['Cantidad'] * df_trades['Precio_Actual_Mercado']
