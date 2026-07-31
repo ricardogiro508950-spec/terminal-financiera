@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.28", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.29", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.28")
-st.caption("Terminal Cuantitativa Pro | Gestión Institucional, Guías de Binance, Cierres Parciales y Nube Completa")
+st.title("👁️ Oculoos Trading v5.29")
+st.caption("Terminal Cuantitativa Pro | Calculadora Dinámica en Vivo para Binance, Gestión Institucional y Nube")
 st.markdown("---")
 
 # ==========================================
@@ -77,80 +77,112 @@ def load_mtf_data(asset_name):
     except:
         return None
 
+# Carga rápida de precios en vivo para los cálculos iniciales
+market_data_init, _ = load_data("1 Día (1D)")
+
 # ==========================================
 # PASO 1: GESTIÓN DE RIESGO Y AUDITORÍA
 # ==========================================
 st.subheader("🛡️ PASO 1: Auditoría de Capital y Gestión de Riesgo")
 st.caption("Regla Institucional: Define tu pérdida máxima antes de mirar los gráficos.")
 ac_col1, ac_col2, ac_col3 = st.columns(3)
-with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, value=1000.0, step=100.0)
-with ac_col2: riesgo_pct = st.slider("Riesgo por Operación (%)", 0.5, 5.0, 1.0, 0.5)
-with ac_col3: stop_loss_pct = st.number_input("Stop-Loss Distancia (%)", min_value=0.1, value=5.0, step=0.5)
+with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, value=1000.0, step=100.0, key="audit_capital")
+with ac_col2: riesgo_pct = st.slider("Riesgo por Operación (%)", 0.5, 5.0, 1.0, 0.5, key="audit_risk")
+with ac_col3: stop_loss_pct = st.number_input("Stop-Loss Distancia (%)", min_value=0.1, value=5.0, step=0.5, key="audit_sl_pct")
 
 riesgo_usd = capital * (riesgo_pct / 100)
 tamano_posicion = riesgo_usd / (stop_loss_pct / 100) if stop_loss_pct > 0 else 0
 
 r_col1, r_col2 = st.columns(2)
 with r_col1: st.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
-with r_col2: st.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} USD")
+with r_col2: st.success(f"**Compra Máxima Permitida (Tamaño de Posición):** ${tamano_posicion:.2f} USD")
 st.markdown("---")
 
 # ==========================================
-# NUEVO 1: GUÍA DE CÓMO OPERAR EN BINANCE (PASO A PASO)
+# NUEVO: CALCULADORA DINÁMICA EN VIVO PARA BINANCE (OCO Y GESTIÓN AVANZADA)
 # ==========================================
-with st.expander("📖 Guía Práctica: Cómo hacer una operación normal en Binance", expanded=False):
+st.subheader("🎯 Calculadora Dinámica en Vivo para Binance (Guía de Órdenes)")
+st.caption("Conectado al precio real del mercado y a tu gestión de riesgo del Paso 1.")
+
+calc_live_col1, calc_live_col2 = st.columns(2)
+with calc_live_col1:
+    activo_calculo = st.selectbox("Selecciona Activo para Calcular:", ["Bitcoin", "Oro"], key="calc_asset_select")
+with calc_live_col2:
+    tipo_operacion = st.selectbox("Dirección de Operación:", ["Compra (Long - Hacia Arriba)", "Venta (Short - Hacia Abajo)"], key="calc_type_select")
+
+# Obtener precio en vivo
+precio_en_vivo = market_data_init.get(activo_calculo, {}).get('price', 60000.0)
+if precio_en_vivo == 0:
+    precio_en_vivo = 60000.0 if activo_calculo == "Bitcoin" else 2000.0
+
+st.info(f"⚡ **Precio Actual en Vivo de {activo_calculo}:** `${precio_en_vivo:,.2f} USD`")
+
+# Cálculos automáticos basados en el precio en vivo y el Stop Loss % del Paso 1
+if "Compra" in tipo_operacion:
+    precio_entrada_calc = precio_en_vivo
+    stop_loss_calc = precio_en_vivo * (1 - (stop_loss_pct / 100))
+    distancia_riesgo = precio_entrada_calc - stop_loss_calc
+    meta_parcial_calc = precio_entrada_calc + distancia_riesgo         # Fase 1: 1R (Vender 50%)
+    meta_final_calc = precio_entrada_calc + (distancia_riesgo * 2)     # Fase 2: 2R (Trailing Stop / Meta Final)
+else:
+    precio_entrada_calc = precio_en_vivo
+    stop_loss_calc = precio_en_vivo * (1 + (stop_loss_pct / 100))
+    distancia_riesgo = stop_loss_calc - precio_entrada_calc
+    meta_parcial_calc = precio_entrada_calc - distancia_riesgo         # Fase 1: 1R (Vender 50%)
+    meta_final_calc = precio_entrada_calc - (distancia_riesgo * 2)     # Fase 2: 2R (Trailing Stop / Meta Final)
+
+# Mostrar guía clara de montos para Binance en tiempo real
+bc_col1, bc_col2, bc_col3 = st.columns(3)
+with bc_col1:
+    st.markdown(f"""
+    <div style="background-color: #111827; padding: 15px; border-radius: 8px; border: 1px solid #374151;">
+        <h4 style="color: #60a5fa; margin-top:0;">1️⃣ Monto a Invertir en Binance</h4>
+        <p style="font-size: 13px; color: #9ca3af;">Monto exacto de tu posición:</p>
+        <h3 style="color: #ffffff;">${tamano_posicion:,.2f} USD</h3>
+        <p style="font-size: 11px; color: #9ca3af;">(Calculado con tu capital y riesgo del Paso 1).</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with bc_col2:
+    st.markdown(f"""
+    <div style="background-color: #1e3a8a; padding: 15px; border-radius: 8px; border: 1px solid #3b82f6;">
+        <h4 style="color: #93c5fd; margin-top:0;">2️⃣ Fase 1: Venta Parcial (50%)</h4>
+        <p style="font-size: 13px; color: #d1d5db;">Precio objetivo para vender la mitad:</p>
+        <h3 style="color: #ffffff;">${meta_parcial_calc:,.2f}</h3>
+        <p style="font-size: 11px; color: #93c5fd;">✅ Luego mueve tu Stop Loss a tu entrada (${precio_entrada_calc:,.2f}). ¡Riesgo $0!</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with bc_col3:
+    st.markdown(f"""
+    <div style="background-color: #064e3b; padding: 15px; border-radius: 8px; border: 1px solid #10b981;">
+        <h4 style="color: #6ee7b7; margin-top:0;">3️⃣ Fase 2: Meta Final / Trailing</h4>
+        <p style="font-size: 13px; color: #d1d5db;">Objetivo final para el 50% restante:</p>
+        <h3 style="color: #ffffff;">${meta_final_calc:,.2f}</h3>
+        <p style="font-size: 11px; color: #6ee7b7;">🧲 O activa Trailing Stop con 5% de margen para exprimir el mercado.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ==========================================
+# GUÍA PRÁCTICA: CÓMO OPERAR EN BINANCE
+# ==========================================
+with st.expander("📖 Guía Práctica de Órdenes en Binance (Paso a Paso)", expanded=False):
     st.markdown("""
     ### 1. La Compra Inicial en Spot
-    * Ve a **Binance -> Trade -> Spot** y selecciona tu par de confianza (ej. `BTC/USDT`).
-    * Selecciona el botón verde de **COMPRAR**.
-    * Cambia el tipo de orden a **Market (Mercado)** para ejecutar tu compra de inmediato al precio actual.
-    * Ingresa el monto exacto dictado por tu Auditoría de Capital (Paso 1) y haz clic en **Comprar**.
+    * Ve a **Binance -> Trade -> Spot** y selecciona tu par (ej. `BTC/USDT`).
+    * Selecciona el botón verde de **COMPRAR** (o rojo si es Short).
+    * Cambia el tipo de orden a **Market (Mercado)** para ejecutar tu orden al instante con el precio en vivo.
+    * Ingresa el **Monto exacto** indicado arriba en tu tarjeta de *Compra Máxima Permitida* y dale clic a Comprar.
     
     ### 2. Configurar los Seguros Automáticos (Órdenes OCO)
-    * Cambia al botón rojo de **VENDER** y selecciona la orden tipo **OCO** (*One Cancels the Other*).
-    * **Precio (Take Profit):** Tu meta de ganancia alta. Si el precio sube y la toca, vende y asegura tu ganancia.
-    * **Stop (Alarma de Peligro):** El precio límite de pérdida. Si el mercado baja y la toca, activa el sistema de emergencia.
-    * **Límite (Venta de Emergencia):** Unos pocos dólares por debajo de la alarma para garantizar que la orden se ejecute al instante.
-    * **Cantidad:** Desliza la barra al 100% para asegurar toda la posición.
+    * Ve al botón de **VENDER** y selecciona la orden tipo **OCO** (*One Cancels the Other*).
+    * **Precio (Take Profit):** Coloca tu meta final o parcial de ganancia.
+    * **Stop (Alarma de Peligro):** Coloca tu precio de Stop Loss de protección (Calculado automáticamente según tu distancia de riesgo).
+    * **Límite (Venta de Emergencia):** Unos pocos dólares más allá de la alarma para asegurar la ejecución.
+    * **Cantidad:** Desliza la barra al 100%.
     """)
-st.markdown("---")
-
-# ==========================================
-# NUEVO 2: MÓDULO DE GESTIÓN AVANZADA (CIERRES PARCIALES Y MÉTODO DE LAS CAMISETAS)
-# ==========================================
-with st.expander("🏆 Módulo de Gestión Avanzada: Cierres Parciales, Break-Even y Trailing Stop", expanded=False):
-    st.markdown("""
-    ### 👕 El Método de las Camisetas (Explicación Conceptual)
-    Imagina que compras inventario. En lugar de vender todo de golpe, aplicamos esta estrategia profesional:
-    * **Fase 1: Venta Parcial (Sacar dinero a la mesa):** Cuando el precio llega a la mitad de tu camino, **vendes el 50% de tu posición**. Tomas ese efectivo y aseguras ganancia real en tu bolsillo.
-    * **Fase 2: Mover al Break-Even (Cero Riesgo):** Como ya vendiste la mitad, tomas tu Stop Loss y lo mueves exactamente a tu precio de entrada original. Si el mercado se desploma después, saldrás al costo y tu pérdida matemática será de **$0**.
-    * **Fase 3: Trailing Stop (Dejar correr al ganador):** Dejas el 50% restante corriendo hacia tu meta final protegido por un "perro guardián automático" (Trailing Stop del 5%) que persigue el precio al alza y asegura la ganancia si hay un retroceso repentino.
-    """)
-    
-    calc_c1, calc_c2, calc_c3 = st.columns(3)
-    with calc_c1: precio_entrada_sim = st.number_input("Precio de Compra Estimado ($)", value=62776.56, step=100.0, key="sim_entry")
-    with calc_c2: meta_final_sim = st.number_input("Meta Final Deseada ($)", value=50221.25, step=100.0, key="sim_target")
-    with calc_c3: stop_inicial_sim = st.number_input("Stop Loss Inicial ($)", value=58068.32, step=100.0, key="sim_sl")
-
-    col_av1, col_av2 = st.columns(2)
-    with col_av1:
-        st.markdown(f"""
-        <div style="background-color: #1e3a8a; padding: 15px; border-radius: 8px; border: 1px solid #3b82f6;">
-            <h4 style="color: #93c5fd; margin-top:0;">Fase 1: Toma de Ganancia Parcial (Vender 50%)</h4>
-            <p style="font-size: 13px; color: #d1d5db;">Meta Inicial: Configura una alerta cuando el precio llegue a:</p>
-            <h2 style="color: #ffffff;">${stop_inicial_sim:,.2f}</h2>
-            <p style="font-size: 12px; color: #93c5fd;">✅ Al tocar este precio: Vende la mitad de tu posición y sube tu Stop Loss manualmente a tu precio de entrada (${precio_entrada_sim:,.2f}). Tu riesgo ahora es $0.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_av2:
-        st.markdown(f"""
-        <div style="background-color: #064e3b; padding: 15px; border-radius: 8px; border: 1px solid #10b981;">
-            <h4 style="color: #6ee7b7; margin-top:0;">Fase 2: Trailing Stop (Dejar Correr el 50%)</h4>
-            <p style="font-size: 13px; color: #d1d5db;">Meta Final Extendida: Apunta a un objetivo mayor en:</p>
-            <h2 style="color: #ffffff;">${meta_final_sim:,.2f}</h2>
-            <p style="font-size: 12px; color: #6ee7b7;">🧲 Activa la herramienta 'Trailing Stop' en tu exchange con un margen de caída del 5.0% para que el seguro persiga tus ganancias automáticamente.</p>
-        </div>
-        """, unsafe_allow_html=True)
 st.markdown("---")
 
 # ==========================================
