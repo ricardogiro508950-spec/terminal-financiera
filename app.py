@@ -11,7 +11,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.42", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v5.43", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # ==========================================
@@ -93,4 +93,303 @@ def load_mtf_data(asset_name):
 
 # MOTOR DE LA PRIMERA VELA (ORB) - Vela de las 9:30 NY
 @st.cache_data(ttl=60)
-def get
+def get_orb_levels(asset_name):
+    try:
+        ticker = "BTC-USD" if asset_name == "Bitcoin" else "GC=F"
+        df = yf.Ticker(ticker).history(period="5d", interval="15m")
+        if df.empty: return None, None
+        
+        if df.index.tz is None: df.index = df.index.tz_localize('UTC')
+        df.index = df.index.tz_convert('America/New_York')
+        
+        df_open = df[(df.index.hour == 9) & (df.index.minute == 30)]
+        if not df_open.empty:
+            last_open = df_open.iloc[-1]
+            return last_open['High'], last_open['Low']
+        return None, None
+    except:
+        return None, None
+
+market_data_init, _ = load_data("1 Día (1D)")
+
+# ==========================================
+# MENÚ LATERAL (SIDEBAR)
+# ==========================================
+st.sidebar.image("https://img.icons8.com/color/96/000000/bullish.png", width=60)
+st.sidebar.title("Menú Oculoos")
+modo_app = st.sidebar.radio("Selecciona tu área de trabajo:", [
+    "📊 Terminal Principal (Operación Real)", 
+    "🎮 Simulador Completo (Práctica)"
+])
+st.sidebar.markdown("---")
+st.sidebar.caption("Oculoos Trading v5.43 | Pullback 5m")
+
+# =====================================================================
+# MODO 1: TERMINAL PRINCIPAL
+# =====================================================================
+if modo_app == "📊 Terminal Principal (Operación Real)":
+    
+    st.title("👁️ Oculoos Trading v5.43 | Terminal de Operación")
+    st.caption("Flujo Institucional, Gestión de Riesgo, y Radar Automático ORB + Pullback")
+    st.markdown("---")
+
+    # PASO 1: GESTIÓN DE RIESGO
+    st.subheader("🛡️ PASO 1: Auditoría de Capital y Gestión de Riesgo")
+    ac_col1, ac_col2, ac_col3 = st.columns(3)
+    with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, step=100.0, key="audit_cap", on_change=update_monto_term)
+    with ac_col2: riesgo_pct = st.slider("Riesgo por Operación (%)", 0.5, 5.0, step=0.1, key="audit_rsk", on_change=update_monto_term)
+    with ac_col3: stop_loss_pct = st.number_input("Stop-Loss Distancia (%)", min_value=0.1, step=0.5, key="audit_sl", on_change=update_monto_term)
+
+    riesgo_usd = capital * (riesgo_pct / 100)
+    r_col1, r_col2 = st.columns(2)
+    with r_col1: st.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
+    with r_col2: tamano_posicion = st.number_input("✅ Compra Máxima Permitida (Inversión USD):", min_value=1.0, step=10.0, key="monto_inv_term")
+    st.markdown("---")
+
+    # FRAGMENTO EN VIVO 
+    @st.fragment(run_every=1)
+    def render_live_market_main():
+        st.subheader("⚙️ Configuración del Radar Institucional")
+        c_ctrl1, c_ctrl2, c_ctrl3 = st.columns(3)
+        with c_ctrl1: asset_choice = st.selectbox("Activo a analizar:", ["Bitcoin", "Oro"], key="live_asset")
+        with c_ctrl3: 
+            st.markdown("<br>", unsafe_allow_html=True)
+            usar_orb = st.checkbox("🎯 Activar Radar 'Primera Vela' (ORB + Pullback)")
+        
+        with c_ctrl2:
+            if usar_orb:
+                selected_timeframe = st.selectbox("Intervalo:", ["5 Minutos (5m)"], disabled=True)
+                st.caption("🔒 Forzado a 5 Minutos para ver el Pullback.")
+            else:
+                selected_timeframe = st.selectbox("Intervalo:", ["5 Minutos (5m)", "15 Minutos (15m)", "1 Hora (1h)", "4 Horas (4h)", "1 Día (1D)"], key="live_tf")
+
+        market_data, market_history = load_data(selected_timeframe)
+        c_close = market_data.get(asset_choice, {}).get('price', 0.0)
+
+        # MÓDULO ESTRATÉGICO: PRIMERA VELA (ORB)
+        if usar_orb:
+            orb_high, orb_low = get_orb_levels(asset_choice)
+            if orb_high and orb_low:
+                st.markdown("### 🎯 Estrategia de la Primera Vela (Rango de Apertura NY)")
+                
+                estado_orb = "⏳ Dentro del Rango (Esperando Ruptura)"
+                color_orb = "#6b7280" # Gris
+                if c_close > orb_high:
+                    estado_orb = "🟢 RUPTURA ALCISTA (¡Espera el Pullback al Techo para Comprar!)"
+                    color_orb = "#10b981"
+                elif c_close > 0 and c_close < orb_low:
+                    estado_orb = "🔴 RUPTURA BAJISTA (¡Espera el Pullback al Piso para Vender!)"
+                    color_orb = "#ef4444"
+
+                st.markdown(f"""
+                <div style="background-color: #111827; padding: 15px; border-radius: 8px; border: 1px solid {color_orb};">
+                    <h4 style="color: {color_orb}; margin-top:0;">{estado_orb}</h4>
+                    <p style="color: #d1d5db; margin-bottom: 5px;">Precio Actual en Vivo: <b>${c_close:,.2f}</b></p>
+                    <ul style="color: #9ca3af; font-size: 14px;">
+                        <li><b>Línea de Techo (Tu soporte para Pullback alcista):</b> ${orb_high:,.2f}</li>
+                        <li><b>Línea de Piso (Tu resistencia para Pullback bajista):</b> ${orb_low:,.2f}</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.warning("No se encontraron datos de la apertura de Nueva York de hoy todavía.")
+
+        # PASO 4: GRAFICO
+        st.subheader(f"📈 PASO 4: Gráfico Cuantitativo [{selected_timeframe}]")
+        if asset_choice in market_history:
+            df = market_history[asset_choice].copy()
+            df["EMA_50"] = df["Close"].ewm(span=50, adjust=False).mean()
+            df["EMA_200"] = df["Close"].ewm(span=200, adjust=False).mean() if len(df) >= 200 else df["Close"].ewm(span=len(df), adjust=False).mean()
+            
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"], name="Precio"))
+            fig.add_trace(go.Scatter(x=df.index, y=df["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
+            fig.add_trace(go.Scatter(x=df.index, y=df["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
+            
+            if usar_orb and 'orb_high' in locals() and orb_high and orb_low:
+                fig.add_hline(y=orb_high, line_dash="dash", line_color="#10b981", annotation_text="Techo ORB (Esperar Retroceso)")
+                fig.add_hline(y=orb_low, line_dash="dash", line_color="#ef4444", annotation_text="Piso ORB (Esperar Retroceso)")
+
+            fig.update_layout(template="plotly_dark", height=450, margin=dict(l=20, r=20, t=20, b=20))
+            st.plotly_chart(fig, use_container_width=True)
+
+    render_live_market_main()
+
+
+# =====================================================================
+# MODO 2: SIMULADOR DE PRÁCTICA COMPLETO
+# =====================================================================
+elif modo_app == "🎮 Simulador Completo (Práctica)":
+    
+    st.title("🎮 Simulador de Operaciones en Vivo")
+    st.caption("Practica la estrategia ORB y los Cierres Parciales con gráficos reales.")
+    st.markdown("---")
+
+    # Panel de Saldo
+    st.markdown(f"### 💰 Saldo de Práctica: **${st.session_state.sim_balance:,.2f} USD**")
+    st.markdown(f"Ganancia/Pérdida Acumulada: **${st.session_state.sim_pnl_historico:,.2f} USD**")
+    st.markdown("---")
+
+    if st.session_state.sim_estado == 'CERRADO_OCO':
+        st.success(st.session_state.get('sim_mensaje_oco', 'Orden ejecutada.'))
+        if st.button("🔄 Volver al simulador"):
+            st.session_state.sim_estado = 'INACTIVO'
+            st.rerun()
+
+    elif st.session_state.sim_estado == 'INACTIVO':
+        st.subheader("1️⃣ Configurar Posición Virtual")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: s_asset = st.selectbox("Activo:", ["Bitcoin", "Oro"])
+        with c2: s_dir = st.selectbox("Dirección:", ["Compra (Long)", "Venta (Short)"])
+        with c3: s_riesgo_pct = st.number_input("Riesgo sobre Saldo (%)", min_value=0.1, step=0.1, key="sim_rsk_pct", on_change=update_monto_sim)
+        with c4: s_sl_pct = st.number_input("Distancia de SL (%):", min_value=0.1, step=0.5, key="sim_sl_pct", on_change=update_monto_sim)
+
+        precio_actual = market_data_init.get(s_asset, {}).get('price', 60000.0)
+        if precio_actual == 0: precio_actual = 60000.0
+        
+        st.info(f"💡 Precio actual de **{s_asset}**: **${precio_actual:,.2f}**")
+        s_monto = st.number_input("💸 Inversión a Ejecutar ($ USD) [Modificable]:", min_value=1.0, step=50.0, key="monto_inv_sim")
+
+        st.markdown("### Selecciona tu Estrategia a Simular")
+        s_estrategia = st.radio("Método de Operación:", [
+            "✋ Estrategia Manual (Botones de Cierre Parcial)",
+            "🤖 Estrategia Automática (Orden OCO)",
+            "🎯 Estrategia 'Primera Vela' (Se cargarán los niveles de la apertura NY)"
+        ])
+
+        s_tp, s_sl = 0.0, 0.0
+
+        if "Primera Vela" in s_estrategia:
+            orb_high, orb_low = get_orb_levels(s_asset)
+            if orb_high and orb_low:
+                st.success(f"✅ Niveles ORB detectados: Techo **${orb_high:,.2f}** | Piso **${orb_low:,.2f}**")
+                rango = orb_high - orb_low
+                if "Compra" in s_dir: 
+                    s_sl = orb_low # Stop loss es el piso de la vela
+                    s_tp = orb_high + rango # Meta es 1:1 el rango hacia arriba
+                else: 
+                    s_sl = orb_high # Stop loss es el techo
+                    s_tp = orb_low - rango # Meta hacia abajo
+                st.caption(f"🤖 OCO Configurado automáticamente: Take Profit en ${s_tp:,.2f} y Stop Loss en ${s_sl:,.2f}.")
+            else:
+                st.error("No se pudo detectar la primera vela todavía. Usa la Estrategia Manual.")
+
+        elif "Automática" in s_estrategia:
+            if "Compra" in s_dir: sl_c = precio_actual * (1-(s_sl_pct/100)); tp_c = precio_actual + ((precio_actual - sl_c)*2)
+            else: sl_c = precio_actual * (1+(s_sl_pct/100)); tp_c = precio_actual - ((sl_c - precio_actual)*2)
+            col_oco1, col_oco2 = st.columns(2)
+            with col_oco1: s_tp = st.number_input("Techo (TP $):", value=tp_c)
+            with col_oco2: s_sl = st.number_input("Piso (SL $):", value=sl_c)
+
+        if st.button("🚀 Ejecutar Operación"):
+            st.session_state.sim_estado = 'ABIERTO'
+            st.session_state.sim_activo = s_asset
+            st.session_state.sim_dir = s_dir
+            st.session_state.sim_monto_actual = s_monto
+            st.session_state.sim_precio_entrada = precio_actual
+            st.session_state.sim_estrategia = s_estrategia
+            st.session_state.sim_tp = s_tp
+            st.session_state.sim_sl = s_sl
+            if "Primera Vela" in s_estrategia:
+                st.session_state.sim_orb_h = orb_high
+                st.session_state.sim_orb_l = orb_low
+            st.rerun()
+
+    else:
+        st.subheader("2️⃣ Vigilancia de Operación Activa y Gráfico")
+        
+        @st.fragment(run_every=1)
+        def ejecutar_simulador_vivo():
+            if st.session_state.get('sim_estado', 'INACTIVO') not in ['ABIERTO', 'FASE1_COMPLETADA']: st.rerun()
+
+            s_asset = st.session_state.get('sim_activo', 'Bitcoin')
+            estrat = st.session_state.get('sim_estrategia', 'Manual')
+            
+            # Forzamos 5 minutos si es estrategia Primera Vela
+            if "Primera Vela" in estrat:
+                m_data, m_history = load_data("5 Minutos (5m)")
+            else:
+                m_data, m_history = load_data("15 Minutos (15m)")
+
+            precio_actual = m_data.get(s_asset, {}).get('price', 60000.0)
+            if precio_actual == 0: precio_actual = 60000.0
+
+            p_ent = st.session_state.get('sim_precio_entrada', 60000.0)
+            monto_v = st.session_state.get('sim_monto_actual', 0.0)
+            dir_s = st.session_state.get('sim_dir', 'Compra (Long)')
+            est_act = st.session_state.get('sim_estado', 'ABIERTO')
+
+            # MOTOR OCO O PRIMERA VELA
+            if "Automática" in estrat or "Primera Vela" in estrat:
+                tp = st.session_state.get('sim_tp', 0.0)
+                sl = st.session_state.get('sim_sl', 0.0)
+                auto_c, raz, p_cierre = False, "", 0.0
+
+                if "Compra" in dir_s:
+                    if precio_actual >= tp: auto_c, raz, p_cierre = True, "Take Profit (Meta ORB)", tp
+                    elif precio_actual <= sl: auto_c, raz, p_cierre = True, "Stop Loss (Piso ORB)", sl
+                else: 
+                    if precio_actual <= tp: auto_c, raz, p_cierre = True, "Take Profit (Meta ORB)", tp
+                    elif precio_actual >= sl: auto_c, raz, p_cierre = True, "Stop Loss (Techo ORB)", sl
+
+                if auto_c:
+                    pnl_pct = ((p_cierre - p_ent)/p_ent)*100 if "Compra" in dir_s else ((p_ent - p_cierre)/p_ent)*100
+                    pnl_usd = monto_v * (pnl_pct / 100)
+                    st.session_state.sim_balance += pnl_usd
+                    st.session_state.sim_pnl_historico += pnl_usd
+                    st.session_state.sim_mensaje_oco = f"🤖 **ORDEN CERRADA:** Cierre automático por **{raz}**. PnL: **${pnl_usd:,.2f} USD**."
+                    st.session_state.sim_estado = 'CERRADO_OCO'
+                    st.rerun()
+
+            pnl_pct = ((precio_actual - p_ent)/p_ent)*100 if "Compra" in dir_s else ((p_ent - precio_actual)/p_ent)*100
+            pnl_usd = monto_v * (pnl_pct / 100)
+
+            d1, d2, d3, d4 = st.columns(4)
+            d1.metric("Activo", s_asset, dir_s)
+            d2.metric("Entrada", f"${p_ent:,.2f}")
+            d3.metric("Actual", f"${precio_actual:,.2f}")
+            d4.metric("PnL Vivo", f"${pnl_usd:,.2f}", f"{pnl_pct:.2f}%")
+
+            # GRAFICO DEL SIMULADOR
+            if s_asset in m_history:
+                df_sim = m_history[s_asset].tail(80) 
+                fig_s = go.Figure(data=[go.Candlestick(x=df_sim.index, open=df_sim["Open"], high=df_sim["High"], low=df_sim["Low"], close=df_sim["Close"], name="Precio")])
+                fig_s.add_hline(y=p_ent, line_dash="dot", line_color="white", annotation_text="Entrada")
+                
+                if "Primera Vela" in estrat:
+                    fig_s.add_hline(y=st.session_state.get('sim_orb_h', 0.0), line_dash="dash", line_color="#10b981", annotation_text="Techo ORB (Esperar Retroceso)")
+                    fig_s.add_hline(y=st.session_state.get('sim_orb_l', 0.0), line_dash="dash", line_color="#ef4444", annotation_text="Piso ORB")
+                    fig_s.add_hline(y=st.session_state.get('sim_tp', 0.0), line_color="gold", annotation_text="Meta ORB 1:1")
+                elif "Automática" in estrat:
+                    fig_s.add_hline(y=st.session_state.get('sim_tp', 0.0), line_dash="dash", line_color="green", annotation_text="TP")
+                    fig_s.add_hline(y=st.session_state.get('sim_sl', 0.0), line_dash="dash", line_color="red", annotation_text="SL")
+                
+                fig_s.update_layout(title="Radar de Persecución", template="plotly_dark", height=400, margin=dict(l=20, r=20, t=10, b=10))
+                st.plotly_chart(fig_s, use_container_width=True)
+
+            if "Primera Vela" in estrat:
+                st.info("💡 **Instrucción ORB:** Recuerda, NO entres a lo loco en la ruptura. Espera que la vela actual de 5m regrese a tocar la línea verde (si compras) o la línea roja (si vendes). Ese es tu pullback.")
+
+            st.markdown("---")
+            c_ac1, c_ac2 = st.columns(2)
+            with c_ac1:
+                if "Manual" in estrat and est_act == 'ABIERTO':
+                    if st.button("✅ Vender 50% y Mover a Break-Even"):
+                        p_mitad = pnl_usd / 2
+                        st.session_state.sim_monto_actual = monto_v / 2
+                        st.session_state.sim_balance += p_mitad
+                        st.session_state.sim_pnl_historico += p_mitad
+                        st.session_state.sim_estado = 'FASE1_COMPLETADA'
+                        st.rerun()
+                elif "Manual" in estrat: st.info("✅ 50% asegurado. Persigue el resto.")
+                else: st.caption("Cierres manuales desactivados (Binance está vigilando ORB/OCO).")
+            
+            with c_ac2:
+                if st.button("🛑 Cerrar Totalmente y Salir de Emergencia"):
+                    st.session_state.sim_balance += pnl_usd
+                    st.session_state.sim_pnl_historico += pnl_usd
+                    st.session_state.sim_estado = 'INACTIVO'
+                    st.rerun()
+
+        ejecutar_simulador_vivo()
