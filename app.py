@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.25", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.26", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.25")
-st.caption("Terminal Cuantitativa Pro | Enfoque Especializado (BTC & Oro) y Simulador OCO")
+st.title("👁️ Oculoos Trading v5.26")
+st.caption("Terminal Cuantitativa Pro | Enfoque Especializado y Módulo Experto (Trailing Stop)")
 st.markdown("---")
 
 # ==========================================
@@ -125,19 +125,6 @@ def render_live_market():
 
     market_data, market_history = load_data(selected_timeframe)
 
-    # Alertas
-    active_alerts = []
-    for asset_name, info in market_data.items():
-        if asset_name in ["DXY (Dólar)", "Bonos 10Y"]: continue
-        chg = info['change']
-        if chg >= 2.0: active_alerts.append(f"🚀 **VOLATILIDAD ALCISTA:** **{asset_name}** registra +`{chg:.2f}%`.")
-        elif chg <= -2.0: active_alerts.append(f"🔻 **VOLATILIDAD BAJISTA:** **{asset_name}** registra `{chg:.2f}%`.")
-    if active_alerts:
-        for alert in active_alerts: st.warning(alert)
-    else:
-        st.info("ℹ️ **Monitoreo:** Mercados estables. Sin volatilidad extrema reciente.")
-    st.markdown("---")
-
     # ================= PASO 2 =================
     st.subheader("🌐 PASO 2: Clima Macroeconómico")
     st.caption("Recuerda: Dólar bajando = Bueno para Bitcoin/Oro. Dólar subiendo = Peligro.")
@@ -217,17 +204,11 @@ def render_live_market():
         m3.metric("EMA 200", f"${current_ema200:,.2f}")
         m4.metric("Sentimiento", f"{sentiment_score} ({sentiment_label})")
 
-        with st.expander(f"📊 Ver Estadísticas Avanzadas de {asset_choice}"):
-            e_col1, e_col2, e_col3 = st.columns(3)
-            e_col1.metric("Mínimo del Periodo", f"${p_low:,.2f}")
-            e_col2.metric("Máximo del Periodo", f"${p_high:,.2f}")
-            e_col3.metric("Volumen", f"${p_vol:,.0f}" if p_vol > 0 else "N/A")
-
         fig = go.Figure()
         fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
-        fig.update_layout(title=f"Acción del Precio [{selected_timeframe}] - {asset_choice}", yaxis_title="Precio (USD/USDT)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
+        fig.update_layout(title=f"Acción del Precio [{selected_timeframe}] - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
         # TEXTO DEL TRADUCTOR
@@ -235,19 +216,6 @@ def render_live_market():
         dxy_status = "BUENO para el riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Presión bajista."
         bond_status = "DESFAVORABLE." if bond_chg > 0 else "FAVORABLE."
         
-        if current_rsi > 70: rsi_context = f"SOBRECOMPRADO ({current_rsi:.2f}). Riesgo de corrección."
-        elif current_rsi < 30: rsi_context = f"SOBREVENDIDO ({current_rsi:.2f}). Zona de rebote institucional."
-        elif current_rsi > 50: rsi_context = f"NEUTRAL-ALCISTA ({current_rsi:.2f}). Impulso comprador."
-        else: rsi_context = f"NEUTRAL-BAJISTA ({current_rsi:.2f}). Presión vendedora."
-
-        ema_structure = "Alcista (EMA 50 > EMA 200)." if current_ema50 > current_ema200 else "Bajista (EMA 50 < EMA 200)."
-        price_battle = "Precio sobre la EMA 50 (Soporte)." if current_close > current_ema50 else "Precio bajo la EMA 50 (Resistencia)."
-
-        st.markdown(f"* **Macroeconomía:** Dólar ({dxy_chg:.2f}%). {dxy_status} | Bonos 10Y ({bond_chg:.2f}%). {bond_status}")
-        st.markdown(f"* **Estructura Técnica:** Tendencia Macro {ema_structure} | {price_battle}")
-        st.markdown(f"* **Momento (RSI & F&G):** {rsi_context} | Sentimiento en zona de {sentiment_label}.")
-
-        # ALGORITMO FINAL
         if current_close > current_ema50 and current_rsi < 70 and current_ema50 > current_ema200:
             st.success("🟢 **ESTADO VERDE:** Confluencia Alcista. Buen escenario para operar a favor de la tendencia.")
         elif current_close < current_ema50 and current_rsi > 30:
@@ -258,38 +226,65 @@ def render_live_market():
     st.markdown("---")
 
     # ================= PASO 5 =================
-    st.subheader(f"🤖 PASO 5: Simulador de Orden OCO en Vivo ({asset_choice})")
-    st.caption("Cálculo automático para tu exchange. Usa una relación Riesgo-Beneficio de 1:2 basada en tu gestión del Paso 1.")
-
+    st.subheader(f"🤖 PASO 5: Central de Órdenes y Simulador ({asset_choice})")
+    
     if current_close > 0:
-        # Lógica de sugerencia de mercado
         if current_close > current_ema50:
             direccion = "COMPRA (Mercado Spot) 🟢"
-            # Cálculos para compra (Long)
-            tp_price = current_close * (1 + ((stop_loss_pct * 2) / 100)) # Doble de ganancia que de pérdida
+            # Básicos
+            tp_price = current_close * (1 + ((stop_loss_pct * 2) / 100))
             sl_price = current_close * (1 - (stop_loss_pct / 100))
-            limit_sl = sl_price * 0.999 # Ligeramente abajo para ejecución segura
+            limit_sl = sl_price * 0.999
+            
+            # Modo Experto (Alcista)
+            tp_parcial = current_close * (1 + ((stop_loss_pct * 1.5) / 100))
+            tp_final = current_close * (1 + ((stop_loss_pct * 4) / 100))
         else:
-            direccion = "MERCADO BAJISTA - ESPERAR O BUSCAR VENTAS (Futuros) 🔴"
-            # Cálculos invertidos para venta corta
+            direccion = "MERCADO BAJISTA - ESPERAR O VENTA (Futuros) 🔴"
+            # Básicos
             tp_price = current_close * (1 - ((stop_loss_pct * 2) / 100))
             sl_price = current_close * (1 + (stop_loss_pct / 100))
             limit_sl = sl_price * 1.001
+            
+            # Modo Experto (Bajista)
+            tp_parcial = current_close * (1 - ((stop_loss_pct * 1.5) / 100))
+            tp_final = current_close * (1 - ((stop_loss_pct * 4) / 100))
 
         cantidad_cripto = tamano_posicion / current_close if current_close > 0 else 0
 
-        st.markdown(f"**Recomendación Actual:** {direccion}")
-        st.markdown(f"**Precio de Entrada (Market):** `${current_close:,.2f}`")
-        st.markdown(f"**Monto a Invertir (Del Paso 1):** `${tamano_posicion:,.2f}` (Aprox. `{cantidad_cripto:,.5f}` unidades de {asset_choice})")
+        st.markdown(f"**Recomendación:** {direccion} | **Precio Entrada:** `${current_close:,.2f}` | **Monto:** `${tamano_posicion:,.2f}`")
 
-        st.markdown("### Configuración de la Orden OCO (Copia esto en tu Exchange)")
+        # TAB 1: OCO Básico
+        st.markdown("#### 1. Configuración Estándar (Orden OCO)")
         col_oco1, col_oco2, col_oco3 = st.columns(3)
-        with col_oco1:
-            st.info(f"**1. Precio (Take Profit)**\n\n### ${tp_price:,.2f}")
-        with col_oco2:
-            st.warning(f"**2. Stop (Alarma)**\n\n### ${sl_price:,.2f}")
-        with col_oco3:
-            st.error(f"**3. Límite (Salida)**\n\n### ${limit_sl:,.2f}")
+        with col_oco1: st.info(f"**Precio (Ganancia):**\n### ${tp_price:,.2f}")
+        with col_oco2: st.warning(f"**Stop (Alarma):**\n### ${sl_price:,.2f}")
+        with col_oco3: st.error(f"**Límite (Salida):**\n### ${limit_sl:,.2f}")
+
+        # TAB 2: Modo Experto
+        st.markdown("#### 2. 🏆 Módulo de Gestión Avanzada (Cierres Parciales y Trailing Stop)")
+        st.caption("Aplica esta estrategia para asegurar liquidez temprana y dejar correr el resto minimizando el riesgo a cero.")
+        
+        col_adv1, col_adv2 = st.columns(2)
+        with col_adv1:
+            st.markdown(f"""
+            <div style="background-color: #1e3a8a; padding: 15px; border-radius: 8px; border: 1px solid #3b82f6;">
+                <h4 style="margin-top:0px; color: #bfdbfe;">Fase 1: Toma de Ganancia Parcial (Vender 50%)</h4>
+                <p style="color: #e0e7ff; font-size: 14px;"><strong>Meta Inicial:</strong> Configura una alerta cuando el precio llegue a:</p>
+                <h2 style="color: white; margin: 10px 0px;">${tp_parcial:,.2f}</h2>
+                <p style="color: #93c5fd; font-size: 13px; margin-bottom: 0px;">✅ Al tocar este precio: Vende la mitad de tu posición y sube tu Stop Loss manualmente a tu precio de entrada (<strong>${current_close:,.2f}</strong>). Tu riesgo ahora es $0.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with col_adv2:
+            st.markdown(f"""
+            <div style="background-color: #064e3b; padding: 15px; border-radius: 8px; border: 1px solid #10b981;">
+                <h4 style="margin-top:0px; color: #a7f3d0;">Fase 2: Trailing Stop (Dejar Correr el 50%)</h4>
+                <p style="color: #d1fae5; font-size: 14px;"><strong>Meta Final Extendida:</strong> Apunta a un objetivo mayor en:</p>
+                <h2 style="color: white; margin: 10px 0px;">${tp_final:,.2f}</h2>
+                <p style="color: #6ee7b7; font-size: 13px; margin-bottom: 0px;">🧲 Activa la herramienta 'Trailing Stop' en tu exchange con un margen de caída del <strong>{stop_loss_pct}%</strong> para que el seguro persiga tus ganancias automáticamente.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 # Ejecutar el fragmento en vivo
 render_live_market()
