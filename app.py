@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.9", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.10", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.9")
-st.caption("Panel Cuantitativo Ultra-Rápido | Reloj Wall Street, Alertas en Vivo y Nube")
+st.title("📊 Terminal Financiera Institucional v5.10")
+st.caption("Panel Cuantitativo Ultra-Rápido | Reloj Wall Street, Alertas y Nube")
 st.markdown("---")
 
 # ==========================================
@@ -28,7 +28,6 @@ try:
     market_hour = ny_now.hour
     market_minute = ny_now.minute
     
-    # Evaluar estado de la sesión de Wall Street
     is_weekday = ny_now.weekday() < 5
     is_market_open = is_weekday and (9 <= market_hour < 16 or (market_hour == 9 and market_minute >= 30))
     session_status = "🟢 MERCADO ABIERTO (Wall Street)" if is_market_open else "🔴 MERCADO CERRADO (Fuera de Sesión)"
@@ -289,7 +288,7 @@ if not df_trades.empty and 'Activo' in df_trades.columns:
     
     precios_actuales = {"Bitcoin": btc_info['price'], "Oro": gold_info['price']}
     df_trades['Precio_Actual_Mercado'] = df_trades['Activo'].map(precios_actuales)
-    df_trades['Valor_Actual_USD'] = df_trades['Cantidad'] * df_trades['Precio_Actual_USD']
+    df_trades['Valor_Actual_USD'] = df_trades['Cantidad'] * df_trades['Precio_Actual_Mercado']
     df_trades['Ganancia/Perdida_USD'] = df_trades['Valor_Actual_USD'] - df_trades['Inversion_Inicial_USD']
     
     inversion_total = df_trades['Inversion_Inicial_USD'].sum()
