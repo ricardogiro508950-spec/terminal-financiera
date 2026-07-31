@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.17", page_icon="📊", layout="wide"
+    page_title="Oculoos Trading v5.19", page_icon="👁️", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.17")
-st.caption("Panel Cuantitativo Pro | Estadísticas Avanzadas, Intervalos y Nube")
+st.title("👁️ Oculoos Trading v5.19")
+st.caption("Terminal Cuantitativa Pro | Estadísticas Avanzadas, Intervalos y Nube")
 st.markdown("---")
 
 # ==========================================
@@ -77,7 +77,6 @@ def load_data(interval_type):
                 prev_price = df["Close"].iloc[-2] if len(df) >= 2 else current_price
                 change = ((current_price - prev_price) / prev_price) * 100
                 
-                # Estadísticas adicionales (Mínimo, Máximo, Volumen)
                 low_period = df["Low"].min()
                 high_period = df["High"].max()
                 volume_latest = df["Volume"].iloc[-1] if "Volume" in df.columns else 0
@@ -204,13 +203,11 @@ def render_live_market():
         current_ema200 = df_asset["EMA_200"].iloc[-1]
         current_rsi = df_asset["RSI"].iloc[-1]
 
-        # Obtener datos estadísticos del activo seleccionado
         selected_info = btc_info if asset_choice == "Bitcoin" else gold_info
         p_low = selected_info["low"]
         p_high = selected_info["high"]
         p_vol = selected_info["volume"]
 
-        # Simulación de Miedo y Codicia
         sentiment_score = int(np.clip(current_rsi * 1.2, 10, 90))
         sentiment_label = "Miedo Extremo" if sentiment_score < 25 else ("Miedo" if sentiment_score < 45 else ("Neutral" if sentiment_score < 55 else ("Codicia" if sentiment_score < 75 else "Codicia Extrema")))
 
@@ -220,7 +217,6 @@ def render_live_market():
         m3.metric("EMA 200", f"${current_ema200:,.2f}")
         m4.metric("Sentimiento (F&G)", f"{sentiment_score} ({sentiment_label})")
 
-        # PANEL DESPLEGABLE DE ESTADÍSTICAS AVANZADAS (ESTILO COINMARKETCAP)
         with st.expander(f"📊 Ver Estadísticas Avanzadas y Datos de Mercado [{asset_choice}]"):
             e_col1, e_col2, e_col3 = st.columns(3)
             e_col1.metric("Mínimo del Periodo", f"${p_low:,.2f}")
@@ -242,7 +238,7 @@ def render_live_market():
 
     st.markdown("---")
 
-    # 5. TRADUCTOR DEL MERCADO EN VIVO (INTEGRANDO ESTADÍSTICAS)
+    # 5. TRADUCTOR DEL MERCADO EN VIVO
     st.subheader(f"📝 Traductor del Mercado — {asset_choice} ({selected_timeframe})")
 
     dxy_chg = dxy_info['change']
@@ -270,7 +266,6 @@ def render_live_market():
     else:
         price_battle = f"Precio atrapado por debajo de la EMA 50 (${current_ema50:,.2f}). Resistencia activa."
 
-    # Contexto estadístico extra en el traductor
     range_position = "cerca de los máximos del rango" if (p_high - p_low) > 0 and ((current_close - p_low) / (p_high - p_low)) > 0.7 else "en zona media o baja del rango"
 
     st.markdown(f"* **Macroeconomía (Dólar):** El Dólar varía un ({dxy_chg:.2f}%). {dxy_status}")
@@ -393,7 +388,6 @@ if not df_trades.empty and 'Activo' in df_trades.columns:
     
     st.dataframe(df_trades.style.format({
         "Cantidad": "{:.5f}",
-        "Precio_Entrashed": "${:,.2f}" if "Precio_Entrashed" in df_trades else "Precio_Entrada",
         "Precio_Entrada": "${:,.2f}",
         "Inversion_Inicial_USD": "${:,.2f}",
         "Precio_Actual_Mercado": "${:,.2f}",
