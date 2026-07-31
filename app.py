@@ -10,15 +10,15 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.3", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.4", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.3")
-st.caption("Panel Cuantitativo Avanzado | Auditoría Visible, Móvil y Nube")
+st.title("📊 Terminal Financiera Institucional v5.4")
+st.caption("Panel Cuantitativo Avanzado | Datos en Tiempo Real y Nube")
 st.markdown("---")
 
 # ==========================================
-# FUNCIONES MATEMÁTICAS Y DE DATOS
+# FUNCIONES MATEMÁTICAS Y DE DATOS (SIN CACHÉ PARA TIEMPO REAL)
 # ==========================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -29,7 +29,6 @@ def calculate_rsi(series, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-@st.cache_data(ttl=600)
 def load_data():
     tickers = {
         "Bitcoin": "BTC-USD",
@@ -58,7 +57,7 @@ def load_data():
 market_data, market_history = load_data()
 
 # ==========================================
-# 1. AUDITORÍA DE CAPITAL Y GESTIÓN DE RIESGO (VISIBLE EN PANTALLA PRINCIPAL)
+# 1. AUDITORÍA DE CAPITAL Y GESTIÓN DE RIESGO
 # ==========================================
 st.subheader("🛡️ Auditoría de Capital y Gestión de Riesgo")
 ac_col1, ac_col2, ac_col3 = st.columns(3)
@@ -82,7 +81,7 @@ st.caption("Regla institucional: Nunca comprometas liquidez sin medir el impacto
 st.markdown("---")
 
 # ==========================================
-# 2. PANEL MACROECONÓMICO E INTERMERCADOS (MÓVIL OPTIMIZADO)
+# 2. PANEL MACROECONÓMICO E INTERMERCADOS (EN TIEMPO REAL)
 # ==========================================
 st.subheader("🌐 Panel Intermercados y Macroeconomía")
 
