@@ -10,11 +10,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.1", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.2", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.1")
-st.caption("Panel Cuantitativo Avanzado | Análisis en Vivo y Libro Mayor en la Nube")
+st.title("📊 Terminal Financiera Institucional v5.2")
+st.caption("Panel Cuantitativo Avanzado | Optimizado para Móvil y Nube")
 st.markdown("---")
 
 # ==========================================
@@ -74,7 +74,7 @@ st.sidebar.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} USD")
 st.sidebar.markdown("Regla institucional: Nunca comprometas liquidez sin medir el impacto de una pérdida.")
 
 # ==========================================
-# 1. PANEL MACROECONÓMICO E INTERMERCADOS
+# 1. PANEL MACROECONÓMICO E INTERMERCADOS (MÓVIL OPTIMIZADO)
 # ==========================================
 st.subheader("🌐 Panel Intermercados y Macroeconomía")
 
@@ -84,10 +84,27 @@ gold_info = market_data.get("Oro", {"price": 0, "change": 0})
 dxy_info = market_data.get("DXY (Dólar)", {"price": 0, "change": 0})
 bond_info = market_data.get("Bonos 10Y", {"price": 0, "change": 0})
 
-col1.metric("Bitcoin (BTC/USD)", f"${btc_info['price']:,.2f}", f"{btc_info['change']:.2f}%")
-col2.metric("Oro (XAU/USD)", f"${gold_info['price']:,.2f}", f"{gold_info['change']:.2f}%")
-col3.metric("Índice Dólar (DXY)", f"{dxy_info['price']:,.2f}", f"{dxy_info['change']:.2f}%")
-col4.metric("Bono 10 Años (US10Y)", f"{bond_info['price']:,.2f}", f"{bond_info['change']:.2f}%")
+def render_mobile_card(col, title, price, change, is_currency=True):
+    p_str = f"${price:,.2f}" if is_currency else f"{price:,.2f}"
+    color = "#28a745" if change >= 0 else "#dc3545"
+    sign = "+" if change >= 0 else ""
+    col.markdown(f"""
+    <div style="background-color: #111827; padding: 6px; border-radius: 6px; border: 1px solid #1f2937; text-align: center;">
+        <div style="font-size: 10px; color: #9ca3af; margin-bottom: 2px;">{title}</div>
+        <div style="font-size: 11px; font-weight: bold; color: #f3f4f6; white-space: nowrap;">{p_str}</div>
+        <div style="font-size: 9px; color: {color}; font-weight: 600;">{sign}{change:.2f}%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col1:
+    render_mobile_card(col1, "Bitcoin", btc_info['price'], btc_info['change'])
+with col2:
+    render_mobile_card(col2, "Oro", gold_info['price'], gold_info['change'])
+with col3:
+    render_mobile_card(col3, "DXY", dxy_info['price'], dxy_info['change'], is_currency=False)
+with col4:
+    render_mobile_card(col4, "Bono 10Y", bond_info['price'], bond_info['change'], is_currency=False)
+
 st.markdown("---")
 
 # ==========================================
@@ -138,11 +155,11 @@ bond_chg = bond_info['change']
 
 dxy_status = "BUENO. Inyecta liquidez a los activos de riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Fortaleza del dólar ejerce presión bajista."
 bond_status = "MALO para el riesgo." if bond_chg > 0 else "FAVORABLE para los activos de riesgo."
-rsi_status = "SORECOMPRADO (>70). Alerta de posible corrección." if current_rsi > 70 else ("SORESOVENDIDO (<30). Posible zona de rebote." if current_rsi < 30 else "SANO. Subiendo o bajando de forma orgánica.")
+rsi_status = "SOBRECOMPRADO (>70). Alerta de posible corrección." if current_rsi > 70 else ("SOBREVENDIDO (<30). Posible zona de rebote." if current_rsi < 30 else "SANO. Subiendo o bajando de forma orgánica.")
 ema_status = "Precio operando por encima de la EMA 50. Tendencia alcista activa." if current_close > current_ema50 else "Precio atrapado debajo de la EMA 50. PRECAUCIÓN. Resistencia activa."
 
-st.markdown(f"* **El Viento a Favor (Macro):** El Índice Dólar cae ({dxy_chg:.2f}%). {dxy_status}")
-st.markdown(f"* **Tasas de Interés:** El Bono a 10 Años sube/baja ({bond_chg:.2f}%). {bond_status}")
+st.markdown(f"* **El Viento a Favor (Macro):** El Índice Dólar cae/sube ({dxy_chg:.2f}%). {dxy_status}")
+st.markdown(f"* **Tasas de Interés:** El Bono a 10 Años varía ({bond_chg:.2f}%). {bond_status}")
 st.markdown(f"* **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. {rsi_status}")
 st.markdown(f"* **Batalla Técnica:** {ema_status}")
 
