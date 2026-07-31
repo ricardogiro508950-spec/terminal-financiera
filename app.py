@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.44", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.45", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.44 (Edición Primera Vela)")
-st.caption("Terminal Cuantitativa Pro | Simulaciones, Gestión Institucional, Nube y Radar ORB")
+st.title("👁️ Oculoos Trading v5.45")
+st.caption("Terminal Cuantitativa Pro | Multi-Estrategia, Gestión Institucional y Nube Completa")
 st.markdown("---")
 
 # ==========================================
@@ -244,26 +244,34 @@ def render_live_market():
     with col_reloj2: st.markdown(f"**Estado:** {session_status}")
     st.markdown("---")
 
-    # Controles Generales y Radar ORB
-    st.subheader("⚙️ Configuración del Radar")
+    # ================= SELECTOR DINÁMICO DE ESTRATEGIA =================
+    st.subheader("⚙️ Configuración del Radar Multi-Estrategia")
     col_ctrl1, col_ctrl2, col_ctrl3 = st.columns(3)
     
     with col_ctrl1: 
         asset_choice = st.selectbox("Activo a analizar:", ["Bitcoin", "Oro"], key="asset_live_choice")
-    with col_ctrl3: 
-        st.markdown("<br>", unsafe_allow_html=True)
-        usar_orb = st.checkbox("🎯 Activar Radar 'Primera Vela' (ORB + Pullback)")
         
     with col_ctrl2: 
-        if usar_orb:
-            selected_timeframe = st.selectbox("Intervalo de Gráfico:", ["5 Minutos (5m)"], key="global_timeframe", disabled=True)
-            st.caption("🔒 Bloqueado a 5 Minutos por Estrategia ORB (Pullback).")
+        estrategia = st.selectbox("🎯 Estrategia a Operar:", [
+            "📊 Confluencia Clásica (Tendencia + RSI)",
+            "🌅 Primera Vela (Ruptura ORB)",
+            "🧲 Cazador de Pullbacks (Rebote EMA 50)"
+        ], key="strat_selector")
+        
+    with col_ctrl3: 
+        # ADAPTACIÓN AUTOMÁTICA DEL INTERVALO SEGÚN LA ESTRATEGIA
+        if "Primera Vela" in estrategia:
+            selected_timeframe = st.selectbox("Intervalo de Gráfico:", ["15 Minutos (15m)", "5 Minutos (5m)"], key="global_timeframe_orb")
+            st.caption("🔒 Bloqueado a 15m/5m por Estrategia ORB.")
+        elif "Pullbacks" in estrategia:
+            selected_timeframe = st.selectbox("Intervalo de Gráfico:", ["15 Minutos (15m)", "1 Hora (1h)"], key="global_timeframe_pull")
+            st.caption("🔒 Configurado para detectar rebotes precisos.")
         else:
-            selected_timeframe = st.selectbox("Intervalo de Gráfico:", ["5 Minutos (5m)", "15 Minutos (15m)", "1 Hora (1h)", "4 Horas (4h)", "1 Día (1D)", "1 Semana (1W)", "1 Mes (1M)"], key="global_timeframe")
+            selected_timeframe = st.selectbox("Intervalo de Gráfico:", ["15 Minutos (15m)", "1 Hora (1h)", "4 Horas (4h)", "1 Día (1D)", "1 Semana (1W)", "1 Mes (1M)"], index=3, key="global_timeframe_clas")
 
     market_data, market_history = load_data(selected_timeframe)
 
-    # Alertas
+    # Alertas Rápidas
     active_alerts = []
     for asset_name, info in market_data.items():
         chg = info['change']
@@ -271,8 +279,6 @@ def render_live_market():
         elif chg <= -0.8: active_alerts.append(f"🔻 **CORRECCIÓN:** **{asset_name}** presenta presión bajista del `{chg:.2f}%`.")
     if active_alerts:
         for alert in active_alerts: st.warning(alert)
-    else:
-        st.info("ℹ️ **Monitoreo:** Mercados estables. Sin volatilidad extrema reciente.")
     st.markdown("---")
 
     # ================= PASO 2 =================
@@ -326,21 +332,22 @@ def render_live_market():
         st.info("Cargando datos institucionales...")
     st.markdown("---")
 
-    # ================= NUEVO: MÓDULO PRIMERA VELA (ORB) EN VIVO =================
-    if usar_orb:
+    # ================= MÓDULOS DE LECTURA DE LA ESTRATEGIA EN VIVO =================
+    orb_high, orb_low = None, None
+    c_close_actual = market_data.get(asset_choice, {}).get('price', 0.0)
+
+    if "Primera Vela" in estrategia:
         orb_high, orb_low = get_orb_levels(asset_choice)
         if orb_high and orb_low:
-            st.markdown(f"### 🎯 Radar Activo: Estrategia Primera Vela ({asset_choice})")
-            
-            c_close_actual = market_data.get(asset_choice, {}).get('price', 0.0)
+            st.markdown(f"### 🎯 Panel de Estrategia: Primera Vela (ORB)")
             estado_orb = "⏳ Dentro del Rango de Apertura (No Operar Todavía)"
-            color_orb = "#6b7280" # Gris
+            color_orb = "#6b7280" 
             
             if c_close_actual > orb_high:
-                estado_orb = "🟢 RUPTURA ALCISTA (¡Espera el Pullback al Techo para Comprar!)"
+                estado_orb = "🟢 RUPTURA ALCISTA CONFIRMADA (Gatillo de Compra Activo)"
                 color_orb = "#10b981"
             elif c_close_actual > 0 and c_close_actual < orb_low:
-                estado_orb = "🔴 RUPTURA BAJISTA (¡Espera el Pullback al Piso para Vender!)"
+                estado_orb = "🔴 RUPTURA BAJISTA CONFIRMADA (Gatillo de Venta Activo)"
                 color_orb = "#ef4444"
 
             st.markdown(f"""
@@ -348,16 +355,16 @@ def render_live_market():
                 <h4 style="color: {color_orb}; margin-top:0;">{estado_orb}</h4>
                 <p style="color: #d1d5db; margin-bottom: 5px;">Precio Actual en Vivo: <b>${c_close_actual:,.2f}</b></p>
                 <ul style="color: #9ca3af; font-size: 14px; margin-bottom: 0;">
-                    <li><b>Línea de Techo (Soporte para Pullback Alcista):</b> ${orb_high:,.2f}</li>
-                    <li><b>Línea de Piso (Resistencia para Pullback Bajista):</b> ${orb_low:,.2f}</li>
+                    <li><b>Línea de Techo (Resistencia ORB):</b> ${orb_high:,.2f}</li>
+                    <li><b>Línea de Piso (Soporte ORB):</b> ${orb_low:,.2f}</li>
                 </ul>
             </div>
             """, unsafe_allow_html=True)
         else:
             st.warning("Aún no se han registrado los datos de la primera vela de las 9:30 AM (NY) para el día de hoy.")
 
-    # ================= PASO 4 =================
-    st.subheader(f"📈 PASO 4: Gráfico Cuantitativo y Traductor [{selected_timeframe}]")
+    # ================= PASO 4: EL GRÁFICO DINÁMICO =================
+    st.subheader(f"📈 PASO 4: Gráfico Dinámico y Traductor [{selected_timeframe}]")
     
     current_close, current_ema50, current_ema200, current_rsi = 0, 0, 0, 50
     if asset_choice in market_history:
@@ -392,43 +399,67 @@ def render_live_market():
                 st.markdown("* **Suministro Circulante:** `20.06M BTC` / Máximo: `21.00M BTC`")
                 st.markdown("* **Dominancia de Mercado:** `~58.61%` | **Clasificación:** `#1`")
 
+        # ADAPTACIÓN VISUAL DEL GRÁFICO
         fig = go.Figure()
         fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
-        fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
-        fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
         
-        # Inyectar las líneas de la estrategia en el gráfico
-        if usar_orb and 'orb_high' in locals() and orb_high and orb_low:
-            fig.add_hline(y=orb_high, line_dash="dash", line_color="#10b981", annotation_text="Techo 1ra Vela (Esperar Retroceso)", annotation_position="top left")
-            fig.add_hline(y=orb_low, line_dash="dash", line_color="#ef4444", annotation_text="Piso 1ra Vela (Esperar Retroceso)", annotation_position="bottom left")
+        if "Pullbacks" in estrategia:
+            # Resaltar la EMA 50 para visualizar rebotes
+            fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="#fbbf24", width=3.5), name="EMA 50 (Soporte/Resistencia)"))
+            fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.0), opacity=0.4, name="EMA 200"))
+        else:
+            fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
+            fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
+        
+        if "Primera Vela" in estrategia and orb_high and orb_low:
+            fig.add_hline(y=orb_high, line_dash="dash", line_color="#10b981", annotation_text="Techo 1ra Vela", annotation_position="top left")
+            fig.add_hline(y=orb_low, line_dash="dash", line_color="#ef4444", annotation_text="Piso 1ra Vela", annotation_position="bottom left")
 
         fig.update_layout(title=f"Acción del Precio [{selected_timeframe}] - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
-        # TEXTO DEL TRADUCTOR
+        # TEXTO DEL TRADUCTOR COMÚN
         dxy_chg, bond_chg = dxy.get('change', 0), bond.get('change', 0)
         dxy_status = "BUENO para el riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Presión bajista."
         bond_status = "DESFAVORABLE." if bond_chg > 0 else "FAVORABLE."
         
-        if current_rsi > 70: rsi_context = f"SOBRECOMPRADO ({current_rsi:.2f}). Riesgo de corrección."
-        elif current_rsi < 30: rsi_context = f"SOBREVENDIDO ({current_rsi:.2f}). Zona de rebote institucional."
-        elif current_rsi > 50: rsi_context = f"NEUTRAL-ALCISTA ({current_rsi:.2f}). Impulso comprador."
-        else: rsi_context = f"NEUTRAL-BAJISTA ({current_rsi:.2f}). Presión vendedora."
-
         ema_structure = "Alcista (EMA 50 > EMA 200)." if current_ema50 > current_ema200 else "Bajista (EMA 50 < EMA 200)."
         price_battle = "Precio sobre la EMA 50 (Soporte)." if current_close > current_ema50 else "Precio bajo la EMA 50 (Resistencia)."
 
         st.markdown(f"* **Macroeconomía:** Dólar ({dxy_chg:.2f}%). {dxy_status} | Bonos 10Y ({bond_chg:.2f}%). {bond_status}")
         st.markdown(f"* **Estructura Técnica:** Tendencia Macro {ema_structure} | {price_battle}")
-        st.markdown(f"* **Momento (RSI & F&G):** {rsi_context} | Sentimiento en zona de {sentiment_label}.")
 
-        # ALGORITMO FINAL
-        if current_close > current_ema50 and current_rsi < 70 and current_ema50 > current_ema200:
-            st.success("🟢 **ESTADO VERDE:** Confluencia Alcista. Buen escenario para operar a favor de la tendencia.")
-        elif current_close < current_ema50 and current_rsi > 30:
-            st.warning("🟡 **ESTADO AMARILLO:** Mercado en consolidación o duda. Máxima precaución.")
-        else:
-            st.error("🔴 **ESTADO ROJO:** Riesgo técnico severo. Evitar operar o usar stop loss ajustado.")
+        # ================= ALGORITMO FINAL (DINÁMICO SEGÚN ESTRATEGIA) =================
+        st.markdown("### 🤖 Decisión del Algoritmo:")
+        
+        if "Clásica" in estrategia:
+            if current_close > current_ema50 and current_rsi < 70 and current_ema50 > current_ema200:
+                st.success("🟢 **ESTADO VERDE (CONFLUENCIA CLÁSICA):** Confluencia Alcista. Buen escenario para operar a favor de la tendencia.")
+            elif current_close < current_ema50 and current_rsi > 30:
+                st.warning("🟡 **ESTADO AMARILLO:** Mercado en consolidación o duda. Máxima precaución.")
+            else:
+                st.error("🔴 **ESTADO ROJO:** Riesgo técnico severo. Evitar operar o usar stop loss ajustado.")
+
+        elif "Primera Vela" in estrategia:
+            if current_close > orb_high:
+                st.success("🟢 **INSTRUCCIÓN ORB:** Ruptura Alcista. Posiciona tus compras (Cuidado con los pullbacks falsos).")
+            elif current_close > 0 and current_close < orb_low:
+                st.error("🔴 **INSTRUCCIÓN ORB:** Ruptura Bajista. Posiciona tus ventas en corto (Short).")
+            else:
+                st.warning("⏳ **INSTRUCCIÓN ORB:** Paciencia. El precio no ha logrado romper el rango de apertura.")
+
+        elif "Pullbacks" in estrategia:
+            dist_pct = abs(current_close - current_ema50) / current_ema50 * 100
+            if current_close > current_ema50:
+                if dist_pct <= 0.35:
+                    st.success(f"🟢 **GATILLO DE PULLBACK (COMPRA):** El precio retrocedió y está tocando la EMA 50. ¡Comprar ahora!")
+                else:
+                    st.warning(f"⏳ **ESPERANDO CAÍDA A LA EMA:** Tendencia alcista, pero el precio está alto. Espera a que baje a tocar la línea amarilla.")
+            else:
+                if dist_pct <= 0.35:
+                    st.error(f"🔴 **GATILLO DE PULLBACK (VENTA):** El precio rebotó hacia arriba y tocó la EMA 50. ¡Vender ahora!")
+                else:
+                    st.warning(f"⏳ **ESPERANDO REBOTE A LA EMA:** Tendencia bajista, pero el precio ya cayó mucho. Espera a que suba a tocar la línea amarilla.")
 
 # Ejecutar el fragmento en vivo
 render_live_market()
