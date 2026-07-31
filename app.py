@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.12", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.14", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.12")
-st.caption("Panel Cuantitativo Ultra-Rápido | Actualización Invisible sin Parpadeos y Nube")
+st.title("📊 Terminal Financiera Institucional v5.14")
+st.caption("Panel Cuantitativo Ultra-Rápido | Traductor Avanzado, Reloj y Nube")
 st.markdown("---")
 
 # ==========================================
@@ -57,9 +57,9 @@ def load_data():
     return data, history
 
 # ==========================================
-# SECCIÓN EN VIVO (ACTUALIZACIÓN AUTOMÁTICA CADA 15 SEG SIN PARPADEO)
+# SECCIÓN EN VIVO (ACTUALIZACIÓN CADA 1 SEG - DATOS CADA 15 SEG)
 # ==========================================
-@st.fragment(run_every=15)
+@st.fragment(run_every=1)
 def render_live_market():
     # 1. Reloj Oficial de Wall Street
     try:
@@ -85,7 +85,7 @@ def render_live_market():
 
     st.markdown("---")
 
-    # Cargar datos en vivo
+    # Cargar datos
     market_data, market_history = load_data()
 
     # 2. Centro de Alertas Institucionales
@@ -171,30 +171,52 @@ def render_live_market():
 
     st.markdown("---")
 
-    # 5. Traductor del Mercado
-    st.subheader("📝 Traductor del Mercado en Vivo")
+    # 5. TRADUCTOR DEL MERCADO EN VIVO (ENRIQUECIDO CON CONTEXTO TÉCNICO)
+    st.subheader(f"📝 Traductor del Mercado en Vivo — Analizando: {asset_choice}")
+
     dxy_chg = dxy_info['change']
     bond_chg = bond_info['change']
 
-    dxy_status = "BUENO. Inyecta liquidez a los activos de riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Fortaleza del dólar ejerce presión bajista."
-    bond_status = "MALO para el riesgo." if bond_chg > 0 else "FAVORABLE para los activos de riesgo."
-    rsi_status = "SOBRECOMPRADO (>70). Alerta de posible corrección." if current_rsi > 70 else ("SOBREVENDIDO (<30). Posible zona de rebote." if current_rsi < 30 else "SANO. Subiendo o bajando de forma orgánica.")
-    ema_status = "Precio operando por encima de la EMA 50. Tendencia alcista activa." if current_close > current_ema50 else "Precio atrapado debajo de la EMA 50. PRECAUCIÓN. Resistencia activa."
+    # Diagnósticos detallados
+    dxy_status = "BUENO. Inyecta liquidez institucional a los activos de riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Fortaleza del Dólar ejerce presión bajista general."
+    bond_status = "DESFAVORABLE para activos de riesgo." if bond_chg > 0 else "FAVORABLE para la valoración de activos."
+    
+    # RSI Detallado
+    if current_rsi > 70:
+        rsi_context = f"SOBRECOMPRADO (RSI en {current_rsi:.2f}). Alerta máxima de agotamiento alcista y posible corrección inminente."
+    elif current_rsi < 30:
+        rsi_context = f"SOBREVENDIDO (RSI en {current_rsi:.2f}). Zona óptima de posible rebote técnico institucional."
+    elif current_rsi > 50:
+        rsi_context = f"NEUTRAL-ALCISTA (RSI en {current_rsi:.2f}). Impulso comprador dominante pero sin extremos."
+    else:
+        rsi_context = f"NEUTRAL-BAJISTA (RSI en {current_rsi:.2f}). Presión vendedora controlada."
 
-    st.markdown(f"* **El Viento a Favor (Macro):** El Dólar varía ({dxy_chg:.2f}%). {dxy_status}")
-    st.markdown(f"* **Tasas de Interés:** El Bono a 10 Años varía ({bond_chg:.2f}%). {bond_status}")
-    st.markdown(f"* **Salud del Movimiento:** RSI en `{current_rsi:.2f}`. {rsi_status}")
-    st.markdown(f"* **Batalla Técnica:** {ema_status}")
+    # Tendencia Estructural (EMA 50 vs EMA 200) y Precio
+    if current_ema50 > current_ema200:
+        ema_structure = "Tendencia Macro Alcista (EMA 50 por encima de la EMA 200)."
+    else:
+        ema_structure = "Tendencia Macro Bajista o de Acumulación (EMA 50 por debajo de la EMA 200)."
+
+    if current_close > current_ema50:
+        price_battle = f"Precio cotizando por encima de la EMA 50 (${current_ema50:,.2f}). Soporte dinámico activo."
+    else:
+        price_battle = f"Precio atrapado por debajo de la EMA 50 (${current_ema50:,.2f}). Resistencia activa, precaución con largos."
+
+    st.markdown(f"* **Macroeconomía (Dólar):** El Dólar varía un ({dxy_chg:.2f}%). {dxy_status}")
+    st.markdown(f"* **Deuda Soberana (Bonos 10Y):** Rendimiento varía un ({bond_chg:.2f}%). {bond_status}")
+    st.markdown(f"* **Inercia del Impulso (RSI 14):** {rsi_context}")
+    st.markdown(f"* **Estructura de Medias Móviles:** {ema_structure}")
+    st.markdown(f"* **Batalla Técnica del Precio:** {price_battle}")
 
     st.markdown("---")
 
     # 6. Algoritmo de Confluencia
-    if current_close > current_ema50 and current_rsi < 70:
-        st.success("🟢 **ESTADO VERDE:** Alta confluencia alcista. Condiciones técnicas favorables para operar.")
+    if current_close > current_ema50 and current_rsi < 70 and current_ema50 > current_ema200:
+        st.success("🟢 **ESTADO VERDE:** Alta confluencia alcista institucional. Alineación perfecta entre precio, medias y momentum.")
     elif current_close < current_ema50 and current_rsi > 30:
-        st.warning("🟡 **ESTADO AMARILLO:** Señales divididas. Mercado dudoso, mantén liquidez.")
+        st.warning("🟡 **ESTADO AMARILLO:** Señales divididas o mercado en rango. Mantén disciplina y gestión de riesgo.")
     else:
-        st.error("🔴 **ESTADO ROJO:** Alta volatilidad o zona de extremidad técnica. Riesgo elevado.")
+        st.error("🔴 **ESTADO ROJO:** Alta volatilidad o conflicto técnico severo. Riesgo elevado de trampa de mercado.")
 
 # Ejecutar el fragmento en vivo
 render_live_market()
@@ -255,7 +277,6 @@ with st.form("registro_operacion", clear_on_submit=True):
     with col_c:
         nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f")
     with col_d:
-        # Cargar precio rápido actual para sugerencia
         market_data_temp, _ = load_data()
         raw_precio = market_data_temp.get(nuevo_activo, {}).get('price', 60000.0)
         precio_seguro = float(raw_precio) if raw_precio > 0 else (60000.0 if nuevo_activo == "Bitcoin" else 2000.0)
