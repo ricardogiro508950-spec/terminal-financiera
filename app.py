@@ -10,11 +10,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.7", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.8", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.7")
-st.caption("Panel Cuantitativo Ultra-Rápido | Números Grandes y Nube")
+st.title("📊 Terminal Financiera Institucional v5.8")
+st.caption("Panel Cuantitativo Ultra-Rápido | Números Extra Grandes y Nube")
 st.markdown("---")
 
 # ==========================================
@@ -82,7 +82,7 @@ st.caption("Regla institucional: Nunca comprometas liquidez sin medir el impacto
 st.markdown("---")
 
 # ==========================================
-# 2. PANEL MACROECONÓMICO E INTERMERCADOS (NÚMEROS MÁS GRANDES)
+# 2. PANEL MACROECONÓMICO E INTERMERCADOS (NÚMEROS EXTRA GRANDES)
 # ==========================================
 st.subheader("🌐 Panel Intermercados y Macroeconomía")
 
@@ -99,7 +99,7 @@ def render_mobile_card(col, title, price, change, is_currency=True):
     col.markdown(f"""
     <div style="background-color: #111827; padding: 10px; border-radius: 6px; border: 1px solid #1f2937; text-align: center;">
         <div style="font-size: 11px; color: #9ca3af; margin-bottom: 4px;">{title}</div>
-        <div style="font-size: 20px; font-weight: bold; color: #f3f4f6; white-space: nowrap;">{p_str}</div>
+        <div style="font-size: 24px; font-weight: bold; color: #f3f4f6; white-space: nowrap;">{p_str}</div>
         <div style="font-size: 11px; color: {color}; font-weight: 600; margin-top: 3px;">{sign}{change:.2f}%</div>
     </div>
     """, unsafe_allow_html=True)
@@ -187,7 +187,7 @@ st.markdown("---")
 # 6. BITÁCORA DE TRADING Y PORTAFOLIO (NUBE)
 # ==========================================
 st.subheader("💼 Mi Portafolio y Bitácora de Trading")
-st.caption("Registra tus compras aquí. El sistema cruzará tus datos con el mercado en vivo para calcular tus ganancias o pérdidas reales.")
+st.caption("Registra tus compras aquí. El sistema cruzará tus datosกับ el mercado en vivo para calcular tus ganancias o pérdidas reales.")
 
 @st.cache_resource(ttl=60)
 def get_sheet_data():
