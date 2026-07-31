@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.26", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.28", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.26")
-st.caption("Terminal Cuantitativa Pro | Flujo Institucional, Salidas Inteligentes y Nube Completa")
+st.title("👁️ Oculoos Trading v5.28")
+st.caption("Terminal Cuantitativa Pro | Gestión Institucional, Guías de Binance, Cierres Parciales y Nube Completa")
 st.markdown("---")
 
 # ==========================================
@@ -96,24 +96,61 @@ with r_col2: st.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} U
 st.markdown("---")
 
 # ==========================================
-# MÓDULO DE GESTIÓN AVANZADA: CALCULADORA DE SALIDAS INTELIGENTES
+# NUEVO 1: GUÍA DE CÓMO OPERAR EN BINANCE (PASO A PASO)
 # ==========================================
-with st.expander("🎯 Módulo de Gestión Avanzada: Calculadora de Salidas Inteligentes (Parciales y Break-Even)", expanded=False):
-    st.markdown("Configura los precios para asegurar el 50% de ganancia y mover tu Stop Loss al punto de entrada (Cero Riesgo).")
-    calc_c1, calc_c2, calc_c3 = st.columns(3)
-    with calc_c1: precio_entrada_sim = st.number_input("Precio de Compra Estimado ($)", value=60000.0, step=100.0, key="sim_entry")
-    with calc_c2: meta_final_sim = st.number_input("Meta Final Deseada ($)", value=66000.0, step=100.0, key="sim_target")
-    with calc_c3: stop_inicial_sim = st.number_input("Stop Loss Inicial ($)", value=57000.0, step=100.0, key="sim_sl")
+with st.expander("📖 Guía Práctica: Cómo hacer una operación normal en Binance", expanded=False):
+    st.markdown("""
+    ### 1. La Compra Inicial en Spot
+    * Ve a **Binance -> Trade -> Spot** y selecciona tu par de confianza (ej. `BTC/USDT`).
+    * Selecciona el botón verde de **COMPRAR**.
+    * Cambia el tipo de orden a **Market (Mercado)** para ejecutar tu compra de inmediato al precio actual.
+    * Ingresa el monto exacto dictado por tu Auditoría de Capital (Paso 1) y haz clic en **Comprar**.
+    
+    ### 2. Configurar los Seguros Automáticos (Órdenes OCO)
+    * Cambia al botón rojo de **VENDER** y selecciona la orden tipo **OCO** (*One Cancels the Other*).
+    * **Precio (Take Profit):** Tu meta de ganancia alta. Si el precio sube y la toca, vende y asegura tu ganancia.
+    * **Stop (Alarma de Peligro):** El precio límite de pérdida. Si el mercado baja y la toca, activa el sistema de emergencia.
+    * **Límite (Venta de Emergencia):** Unos pocos dólares por debajo de la alarma para garantizar que la orden se ejecute al instante.
+    * **Cantidad:** Desliza la barra al 100% para asegurar toda la posición.
+    """)
+st.markdown("---")
 
-    if meta_final_sim > precio_entrada_sim:
-        mitad_camino = precio_entrada_sim + ((meta_final_sim - precio_entrada_sim) / 2)
+# ==========================================
+# NUEVO 2: MÓDULO DE GESTIÓN AVANZADA (CIERRES PARCIALES Y MÉTODO DE LAS CAMISETAS)
+# ==========================================
+with st.expander("🏆 Módulo de Gestión Avanzada: Cierres Parciales, Break-Even y Trailing Stop", expanded=False):
+    st.markdown("""
+    ### 👕 El Método de las Camisetas (Explicación Conceptual)
+    Imagina que compras inventario. En lugar de vender todo de golpe, aplicamos esta estrategia profesional:
+    * **Fase 1: Venta Parcial (Sacar dinero a la mesa):** Cuando el precio llega a la mitad de tu camino, **vendes el 50% de tu posición**. Tomas ese efectivo y aseguras ganancia real en tu bolsillo.
+    * **Fase 2: Mover al Break-Even (Cero Riesgo):** Como ya vendiste la mitad, tomas tu Stop Loss y lo mueves exactamente a tu precio de entrada original. Si el mercado se desploma después, saldrás al costo y tu pérdida matemática será de **$0**.
+    * **Fase 3: Trailing Stop (Dejar correr al ganador):** Dejas el 50% restante corriendo hacia tu meta final protegido por un "perro guardián automático" (Trailing Stop del 5%) que persigue el precio al alza y asegura la ganancia si hay un retroceso repentino.
+    """)
+    
+    calc_c1, calc_c2, calc_c3 = st.columns(3)
+    with calc_c1: precio_entrada_sim = st.number_input("Precio de Compra Estimado ($)", value=62776.56, step=100.0, key="sim_entry")
+    with calc_c2: meta_final_sim = st.number_input("Meta Final Deseada ($)", value=50221.25, step=100.0, key="sim_target")
+    with calc_c3: stop_inicial_sim = st.number_input("Stop Loss Inicial ($)", value=58068.32, step=100.0, key="sim_sl")
+
+    col_av1, col_av2 = st.columns(2)
+    with col_av1:
         st.markdown(f"""
-        * **1️⃣ Meta Parcial (Vender 50%):** Al llegar a **${mitad_camino:,.2f}**, vende la mitad de tus posiciones para asegurar efectivo.
-        * **2️⃣ El Nuevo Piso (Break-Even):** En ese preciso instante, mueve tu Stop Loss al precio de entrada **${precio_entrada_sim:,.2f}**. ¡Tu riesgo se vuelve CERO!
-        * **3️⃣ Meta Final:** Deja correr el 50% restante hasta los **${meta_final_sim:,.2f}**.
-        """)
-    else:
-        st.warning("⚠️ La meta final debe ser mayor al precio de entrada.")
+        <div style="background-color: #1e3a8a; padding: 15px; border-radius: 8px; border: 1px solid #3b82f6;">
+            <h4 style="color: #93c5fd; margin-top:0;">Fase 1: Toma de Ganancia Parcial (Vender 50%)</h4>
+            <p style="font-size: 13px; color: #d1d5db;">Meta Inicial: Configura una alerta cuando el precio llegue a:</p>
+            <h2 style="color: #ffffff;">${stop_inicial_sim:,.2f}</h2>
+            <p style="font-size: 12px; color: #93c5fd;">✅ Al tocar este precio: Vende la mitad de tu posición y sube tu Stop Loss manualmente a tu precio de entrada (${precio_entrada_sim:,.2f}). Tu riesgo ahora es $0.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_av2:
+        st.markdown(f"""
+        <div style="background-color: #064e3b; padding: 15px; border-radius: 8px; border: 1px solid #10b981;">
+            <h4 style="color: #6ee7b7; margin-top:0;">Fase 2: Trailing Stop (Dejar Correr el 50%)</h4>
+            <p style="font-size: 13px; color: #d1d5db;">Meta Final Extendida: Apunta a un objetivo mayor en:</p>
+            <h2 style="color: #ffffff;">${meta_final_sim:,.2f}</h2>
+            <p style="font-size: 12px; color: #6ee7b7;">🧲 Activa la herramienta 'Trailing Stop' en tu exchange con un margen de caída del 5.0% para que el seguro persiga tus ganancias automáticamente.</p>
+        </div>
+        """, unsafe_allow_html=True)
 st.markdown("---")
 
 # ==========================================
