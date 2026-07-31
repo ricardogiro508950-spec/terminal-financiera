@@ -1,5 +1,6 @@
 import json
 import datetime
+from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -10,11 +11,38 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Terminal Financiera Institucional v5.8", page_icon="📊", layout="wide"
+    page_title="Terminal Financiera Institucional v5.9", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Terminal Financiera Institucional v5.8")
-st.caption("Panel Cuantitativo Ultra-Rápido | Números Extra Grandes y Nube")
+st.title("📊 Terminal Financiera Institucional v5.9")
+st.caption("Panel Cuantitativo Ultra-Rápido | Reloj Wall Street, Alertas en Vivo y Nube")
+st.markdown("---")
+
+# ==========================================
+# RELOJ OFICIAL DE WALL STREET (NUEVA YORK)
+# ==========================================
+try:
+    ny_now = datetime.datetime.now(ZoneInfo("America/New_York"))
+    ny_time_str = ny_now.strftime("%I:%M:%S %p")
+    ny_date_str = ny_now.strftime("%A, %d %B %Y")
+    market_hour = ny_now.hour
+    market_minute = ny_now.minute
+    
+    # Evaluar estado de la sesión de Wall Street
+    is_weekday = ny_now.weekday() < 5
+    is_market_open = is_weekday and (9 <= market_hour < 16 or (market_hour == 9 and market_minute >= 30))
+    session_status = "🟢 MERCADO ABIERTO (Wall Street)" if is_market_open else "🔴 MERCADO CERRADO (Fuera de Sesión)"
+except Exception:
+    ny_time_str = "Sincronizando..."
+    ny_date_str = ""
+    session_status = "⏳ Verificando sesión..."
+
+col_reloj1, col_reloj2 = st.columns([2, 1])
+with col_reloj1:
+    st.markdown(f"🕒 **Hora Oficial NY (Wall Street):** `{ny_time_str}` — *{ny_date_str}*")
+with col_reloj2:
+    st.markdown(f"**Estado:** {session_status}")
+
 st.markdown("---")
 
 # ==========================================
@@ -56,6 +84,26 @@ def load_data():
     return data, history
 
 market_data, market_history = load_data()
+
+# ==========================================
+# CENTRO DE ANUNCIOS Y ALERTAS INTELIGENTES EN VIVO
+# ==========================================
+st.subheader("🚨 Centro de Alertas Institucionales")
+active_alerts = []
+for asset_name, info in market_data.items():
+    chg = info['change']
+    if chg >= 0.8:
+        active_alerts.append(f"🚀 **CRECIMIENTO DESTACADO:** En la sesión de Wall Street, **{asset_name}** registra un fuerte impulso alcista del `+{chg:.2f}%`.")
+    elif chg <= -0.8:
+        active_alerts.append(f"🔻 **CORRECCIÓN DETECTADA:** En la sesión de Wall Street, **{asset_name}** presenta una presión bajista del `{chg:.2f}%`.")
+
+if active_alerts:
+    for alert in active_alerts:
+        st.warning(alert)
+else:
+    st.info("ℹ️ **Monitoreo Activo:** Los mercados principales operan con variaciones estables en este intervalo. Sin picos de volatilidad extrema.")
+
+st.markdown("---")
 
 # ==========================================
 # 1. AUDITORÍA DE CAPITAL Y GESTIÓN DE RIESGO
@@ -187,7 +235,7 @@ st.markdown("---")
 # 6. BITÁCORA DE TRADING Y PORTAFOLIO (NUBE)
 # ==========================================
 st.subheader("💼 Mi Portafolio y Bitácora de Trading")
-st.caption("Registra tus compras aquí. El sistema cruzará tus datosกับ el mercado en vivo para calcular tus ganancias o pérdidas reales.")
+st.caption("Registra tus compras aquí. El sistema cruzará tus datos con el mercado en vivo para calcular tus ganancias o pérdidas reales.")
 
 @st.cache_resource(ttl=60)
 def get_sheet_data():
@@ -241,7 +289,7 @@ if not df_trades.empty and 'Activo' in df_trades.columns:
     
     precios_actuales = {"Bitcoin": btc_info['price'], "Oro": gold_info['price']}
     df_trades['Precio_Actual_Mercado'] = df_trades['Activo'].map(precios_actuales)
-    df_trades['Valor_Actual_USD'] = df_trades['Cantidad'] * df_trades['Precio_Actual_Mercado']
+    df_trades['Valor_Actual_USD'] = df_trades['Cantidad'] * df_trades['Precio_Actual_USD']
     df_trades['Ganancia/Perdida_USD'] = df_trades['Valor_Actual_USD'] - df_trades['Inversion_Inicial_USD']
     
     inversion_total = df_trades['Inversion_Inicial_USD'].sum()
