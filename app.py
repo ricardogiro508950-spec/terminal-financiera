@@ -11,11 +11,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.23", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.25", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.23")
-st.caption("Terminal Cuantitativa Pro | Flujo de Trabajo Institucional y Simulador OCO")
+st.title("👁️ Oculoos Trading v5.25")
+st.caption("Terminal Cuantitativa Pro | Enfoque Especializado (BTC & Oro) y Simulador OCO")
 st.markdown("---")
 
 # ==========================================
@@ -84,7 +84,7 @@ def load_mtf_data(asset_name):
 st.subheader("🛡️ PASO 1: Auditoría de Capital y Gestión de Riesgo")
 st.caption("Regla Institucional: Define tu pérdida máxima antes de mirar los gráficos.")
 ac_col1, ac_col2, ac_col3 = st.columns(3)
-with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, value=1000.0, step=100.0)
+with ac_col1: capital = st.number_input("Capital Total (USDT/USD)", min_value=10.0, value=1000.0, step=100.0)
 with ac_col2: riesgo_pct = st.slider("Riesgo por Operación (%)", 0.5, 5.0, 1.0, 0.5)
 with ac_col3: stop_loss_pct = st.number_input("Stop-Loss Distancia (%)", min_value=0.1, value=5.0, step=0.5)
 
@@ -92,8 +92,8 @@ riesgo_usd = capital * (riesgo_pct / 100)
 tamano_posicion = riesgo_usd / (stop_loss_pct / 100) if stop_loss_pct > 0 else 0
 
 r_col1, r_col2 = st.columns(2)
-with r_col1: st.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f} USD")
-with r_col2: st.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f} USD")
+with r_col1: st.error(f"**Pérdida Máxima Aceptada:** ${riesgo_usd:.2f}")
+with r_col2: st.success(f"**Compra Máxima Permitida:** ${tamano_posicion:.2f}")
 st.markdown("---")
 
 # ==========================================
@@ -128,9 +128,10 @@ def render_live_market():
     # Alertas
     active_alerts = []
     for asset_name, info in market_data.items():
+        if asset_name in ["DXY (Dólar)", "Bonos 10Y"]: continue
         chg = info['change']
-        if chg >= 0.8: active_alerts.append(f"🚀 **CRECIMIENTO:** **{asset_name}** registra fuerte impulso alcista del `+{chg:.2f}%`.")
-        elif chg <= -0.8: active_alerts.append(f"🔻 **CORRECCIÓN:** **{asset_name}** presenta presión bajista del `{chg:.2f}%`.")
+        if chg >= 2.0: active_alerts.append(f"🚀 **VOLATILIDAD ALCISTA:** **{asset_name}** registra +`{chg:.2f}%`.")
+        elif chg <= -2.0: active_alerts.append(f"🔻 **VOLATILIDAD BAJISTA:** **{asset_name}** registra `{chg:.2f}%`.")
     if active_alerts:
         for alert in active_alerts: st.warning(alert)
     else:
@@ -139,6 +140,7 @@ def render_live_market():
 
     # ================= PASO 2 =================
     st.subheader("🌐 PASO 2: Clima Macroeconómico")
+    st.caption("Recuerda: Dólar bajando = Bueno para Bitcoin/Oro. Dólar subiendo = Peligro.")
     col1, col2, col3, col4 = st.columns(4)
     btc, gold, dxy, bond = market_data.get("Bitcoin", {}), market_data.get("Oro", {}), market_data.get("DXY (Dólar)", {}), market_data.get("Bonos 10Y", {})
     
@@ -157,7 +159,7 @@ def render_live_market():
 
     render_mobile_card(col1, "Bitcoin", btc)
     render_mobile_card(col2, "Oro", gold)
-    render_mobile_card(col3, "DXY", dxy, False)
+    render_mobile_card(col3, "DXY (Dólar)", dxy, False)
     render_mobile_card(col4, "Bono 10Y", bond, False)
     st.markdown("---")
 
@@ -203,7 +205,7 @@ def render_live_market():
         current_ema200 = df_asset["EMA_200"].iloc[-1]
         current_rsi = df_asset["RSI"].iloc[-1]
         
-        selected_info = btc if asset_choice == "Bitcoin" else gold
+        selected_info = market_data.get(asset_choice, {})
         p_low, p_high, p_vol = selected_info.get("low", 0), selected_info.get("high", 0), selected_info.get("volume", 0)
 
         sentiment_score = int(np.clip(current_rsi * 1.2, 10, 90))
@@ -220,15 +222,12 @@ def render_live_market():
             e_col1.metric("Mínimo del Periodo", f"${p_low:,.2f}")
             e_col2.metric("Máximo del Periodo", f"${p_high:,.2f}")
             e_col3.metric("Volumen", f"${p_vol:,.0f}" if p_vol > 0 else "N/A")
-            if asset_choice == "Bitcoin":
-                st.markdown("* **Suministro Circulante:** `20.06M BTC` / Máximo: `21.00M BTC`")
-                st.markdown("* **Dominancia de Mercado:** `~58.61%` | **Clasificación:** `#1`")
 
         fig = go.Figure()
         fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
         fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
-        fig.update_layout(title=f"Acción del Precio [{selected_timeframe}] - {asset_choice}", yaxis_title="Precio (USD)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
+        fig.update_layout(title=f"Acción del Precio [{selected_timeframe}] - {asset_choice}", yaxis_title="Precio (USD/USDT)", template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
         # TEXTO DEL TRADUCTOR
@@ -281,9 +280,9 @@ def render_live_market():
 
         st.markdown(f"**Recomendación Actual:** {direccion}")
         st.markdown(f"**Precio de Entrada (Market):** `${current_close:,.2f}`")
-        st.markdown(f"**Monto a Invertir (Del Paso 1):** `${tamano_posicion:,.2f} USD` (Aprox. `{cantidad_cripto:,.5f}` unidades)")
+        st.markdown(f"**Monto a Invertir (Del Paso 1):** `${tamano_posicion:,.2f}` (Aprox. `{cantidad_cripto:,.5f}` unidades de {asset_choice})")
 
-        st.markdown("### Configuración de la Orden OCO (Binance)")
+        st.markdown("### Configuración de la Orden OCO (Copia esto en tu Exchange)")
         col_oco1, col_oco2, col_oco3 = st.columns(3)
         with col_oco1:
             st.info(f"**1. Precio (Take Profit)**\n\n### ${tp_price:,.2f}")
