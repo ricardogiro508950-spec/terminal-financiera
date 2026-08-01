@@ -11,12 +11,16 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.45", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.46", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.45")
-st.caption("Terminal Cuantitativa Pro | Multi-Estrategia, Gestión Institucional y Nube Completa")
+st.title("👁️ Oculoos Trading v5.46")
+st.caption("Terminal Cuantitativa Pro | Multi-Activo (BTC/Oro/Petróleo), Multi-Estrategia y Bitácora de Cierres")
 st.markdown("---")
+
+ACTIVOS_DISPONIBLES = ["Bitcoin", "Oro", "Petróleo"]
+TICKER_MAP = {"Bitcoin": "BTC-USD", "Oro": "GC=F", "Petróleo": "CL=F"}
+PRECIO_DEFECTO = {"Bitcoin": 60000.0, "Oro": 2000.0, "Petróleo": 75.0}
 
 # ==========================================
 # FUNCIONES MATEMÁTICAS Y DE DATOS
@@ -47,7 +51,10 @@ def load_data(interval_type):
     else:  # 1 Día (1D)
         period, yf_interval = "6mo", "1d"
 
-    tickers = {"Bitcoin": "BTC-USD", "Oro": "GC=F", "DXY (Dólar)": "DX-Y.NYB", "Bonos 10Y": "^TNX"}
+    tickers = {
+        "Bitcoin": "BTC-USD", "Oro": "GC=F", "Petróleo": "CL=F",
+        "DXY (Dólar)": "DX-Y.NYB", "Bonos 10Y": "^TNX"
+    }
     data, history = {}, {}
     for name, ticker in tickers.items():
         try:
@@ -64,41 +71,39 @@ def load_data(interval_type):
                 data[name] = {"price": current_price, "change": change, "low": low_period, "high": high_period, "volume": volume_latest}
             else:
                 data[name] = {"price": 0.0, "change": 0.0, "low": 0.0, "high": 0.0, "volume": 0.0}
-        except:
+        except Exception:
             data[name] = {"price": 0.0, "change": 0.0, "low": 0.0, "high": 0.0, "volume": 0.0}
     return data, history
 
 @st.cache_data(ttl=15)
 def load_mtf_data(asset_name):
-    ticker = "BTC-USD" if asset_name == "Bitcoin" else "GC=F"
+    ticker = TICKER_MAP.get(asset_name, "BTC-USD")
     try:
         df_1d = yf.Ticker(ticker).history(period="3mo", interval="1d")
         df_1h = yf.Ticker(ticker).history(period="1mo", interval="1h")
         df_4h = df_1h.resample('4h').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}).dropna()
         return {"1D": df_1d, "4H": df_4h, "1H": df_1h}
-    except:
+    except Exception:
         return None
 
-# NUEVA FUNCIÓN: MOTOR DE LA PRIMERA VELA (ORB) - Vela de las 9:30 NY
+# MOTOR DE LA PRIMERA VELA (ORB) - Vela de las 9:30 NY
 @st.cache_data(ttl=60)
 def get_orb_levels(asset_name):
     try:
-        ticker = "BTC-USD" if asset_name == "Bitcoin" else "GC=F"
+        ticker = TICKER_MAP.get(asset_name, "BTC-USD")
         df = yf.Ticker(ticker).history(period="5d", interval="15m")
         if df.empty: return None, None
-        
-        # Estandarizar a hora de Nueva York
-        if df.index.tz is None: 
+
+        if df.index.tz is None:
             df.index = df.index.tz_localize('UTC')
         df.index = df.index.tz_convert('America/New_York')
-        
-        # Buscar las velas exactas de las 9:30 AM
+
         df_open = df[(df.index.hour == 9) & (df.index.minute == 30)]
         if not df_open.empty:
             last_open = df_open.iloc[-1]
             return last_open['High'], last_open['Low']
         return None, None
-    except:
+    except Exception:
         return None, None
 
 # Carga inicial de precios en vivo
@@ -128,13 +133,16 @@ st.markdown("---")
 st.subheader("🎛️ Configuración de Simulaciones en Vivo")
 sim_cfg1, sim_cfg2 = st.columns(2)
 with sim_cfg1:
-    activo_sim = st.selectbox("Selecciona Activo:", ["Bitcoin", "Oro"], key="sim_asset_sel")
+    activo_sim = st.selectbox("Selecciona Activo:", ACTIVOS_DISPONIBLES, key="sim_asset_sel")
 with sim_cfg2:
     direccion_sim = st.selectbox("Dirección de Operación:", ["Compra (Long - Hacia Arriba)", "Venta (Short - Hacia Abajo)"], key="sim_dir_sel")
 
-precio_vivo_sim = market_data_init.get(activo_sim, {}).get('price', 60000.0)
-if precio_vivo_sim == 0:
-    precio_vivo_sim = 60000.0 if activo_sim == "Bitcoin" else 2000.0
+if activo_sim == "Petróleo":
+    st.caption("⚠️ El Petróleo (CL=F) no cotiza 24/7 como Bitcoin: en fines de semana o feriados el precio puede verse congelado. Eso es normal.")
+
+precio_vivo_sim = market_data_init.get(activo_sim, {}).get('price', 0.0)
+if not precio_vivo_sim or precio_vivo_sim == 0:
+    precio_vivo_sim = PRECIO_DEFECTO.get(activo_sim, 100.0)
 
 st.info(f"⚡ **Precio Actual en Vivo de {activo_sim}:** `${precio_vivo_sim:,.2f} USD`")
 
@@ -155,7 +163,7 @@ else:
 # ==========================================
 with st.expander("📊 Simulación 1: Orden Estándar de Riesgo y Órdenes OCO en Binance", expanded=True):
     st.markdown("Esta simulación calcula los datos exactos para entrar al mercado con un único objetivo de ganancia (Ratio 1:2) y protección total.")
-    
+
     s1_c1, s1_c2, s1_c3 = st.columns(3)
     with s1_c1:
         st.metric("1️⃣ Monto a Comprar/Vender", f"${tamano_posicion:,.2f} USD")
@@ -174,7 +182,8 @@ st.markdown("---")
 # ==========================================
 with st.expander("🏆 Simulación 2: Persecución Dinámica, Cierres Parciales y Break-Even (50% + 50%)", expanded=True):
     st.markdown("Aquí aplicamos la persecución del precio: vendes el 50% temprano para asegurar efectivo, subes tu base a riesgo cero, y persigues el resto.")
-    
+    st.caption("👉 En Binance esto se hace con DOS órdenes OCO separadas (una por cada 50% de tu posición). Cuando la primera se ejecuta, cancelas la segunda y la vuelves a crear con el Stop movido a tu precio de entrada.")
+
     s2_c1, s2_c2, s2_c3 = st.columns(3)
     with s2_c1:
         st.markdown(f"""
@@ -187,17 +196,17 @@ with st.expander("🏆 Simulación 2: Persecución Dinámica, Cierres Parciales 
     with s2_c2:
         st.markdown(f"""
         <div style="background-color: #1e3a8a; padding: 12px; border-radius: 6px; border: 1px solid #3b82f6;">
-            <h4 style="color: #93c5fd; margin-top:0;">Fase 1: Venta del 50%</h4>
+            <h4 style="color: #93c5fd; margin-top:0;">Fase 1: Venta del 50% (OCO #1)</h4>
             <h3 style="color: #ffffff;">${meta_1r:,.2f}</h3>
-            <p style="font-size: 11px; color: #93c5fd;">✅ Vende la mitad (${tamano_posicion/2:,.2f}) y mueve tu Stop Loss a tu entrada (${precio_vivo_sim:,.2f}). ¡Riesgo $0!</p>
+            <p style="font-size: 11px; color: #93c5fd;">✅ Vende la mitad (${tamano_posicion/2:,.2f}) y mueve el Stop del OCO #2 a tu entrada (${precio_vivo_sim:,.2f}). ¡Riesgo $0!</p>
         </div>
         """, unsafe_allow_html=True)
     with s2_c3:
         st.markdown(f"""
         <div style="background-color: #064e3b; padding: 12px; border-radius: 6px; border: 1px solid #10b981;">
-            <h4 style="color: #6ee7b7; margin-top:0;">Fase 2: Persecución / Meta 2</h4>
+            <h4 style="color: #6ee7b7; margin-top:0;">Fase 2: Persecución / Meta 2 (OCO #2)</h4>
             <h3 style="color: #ffffff;">${meta_2r:,.2f}</h3>
-            <p style="font-size: 11px; color: #6ee7b7;">🧲 Sigue persiguiendo el precio con el 50% restante o activa Trailing Stop (5%).</p>
+            <p style="font-size: 11px; color: #6ee7b7;">🧲 Sigue persiguiendo el precio con el 50% restante, o activa Trailing Stop (5%) en vez del segundo OCO.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -213,20 +222,24 @@ with st.expander("📖 Guía Práctica de Órdenes en Binance (Paso a Paso)", ex
     * Selecciona el botón verde de **COMPRAR** (o rojo si es Short).
     * Cambia el tipo de orden a **Market (Mercado)** para ejecutar tu orden al instante con el precio en vivo.
     * Ingresa el **Monto exacto** indicado en tus tarjetas de simulación y dale clic a Comprar.
-    
+
     ### 2. Configurar los Seguros Automáticos (Órdenes OCO)
     * Ve al botón de **VENDER** y selecciona la orden tipo **OCO** (*One Cancels the Other*).
     * **Precio (Take Profit):** Coloca tu meta final o parcial de ganancia calculada arriba.
     * **Stop (Alarma de Peligro):** Coloca tu precio de Stop Loss de protección.
     * **Límite (Venta de Emergencia):** Unos pocos dólares más allá de la alarma para asegurar la ejecución.
-    * **Cantidad:** Desliza la barra al 100%.
+    * **Cantidad:** Desliza la barra al 100% (o 50% si es tu primer cierre parcial).
+
+    ### 3. Cierre parcial + Break-Even (el paso que la gente olvida)
+    * Binance NO permite editar un OCO activo. Cuando el primer OCO se ejecuta (vendiste el 50%), debes **cancelar manualmente** el segundo OCO.
+    * Crea un OCO nuevo para el 50% restante: mismo Take Profit, pero el Stop ahora lo mueves a tu precio de entrada original (Break-Even). Así tu riesgo en esa mitad queda en $0.
     """)
 st.markdown("---")
 
 # ==========================================
-# SECCIÓN EN VIVO (ACTUALIZACIÓN CADA 1 SEG)
+# SECCIÓN EN VIVO (ACTUALIZACIÓN CADA 5 SEG)
 # ==========================================
-@st.fragment(run_every=1)
+@st.fragment(run_every=5)
 def render_live_market():
     # Reloj de Wall Street
     try:
@@ -235,8 +248,8 @@ def render_live_market():
         ny_date_str = ny_now.strftime("%A, %d %B %Y")
         market_hour, market_minute = ny_now.hour, ny_now.minute
         is_market_open = (ny_now.weekday() < 5) and (9 <= market_hour < 16 or (market_hour == 9 and market_minute >= 30))
-        session_status = "🟢 MERCADO ABIERTO" if is_market_open else "🔴 MERCADO CERRADO"
-    except:
+        session_status = "🟢 MERCADO ABIERTO (Acciones/Futuros NY)" if is_market_open else "🔴 FUERA DE SESIÓN NY"
+    except Exception:
         ny_time_str, ny_date_str, session_status = "Sincronizando...", "", "⏳ Verificando..."
 
     col_reloj1, col_reloj2 = st.columns([2, 1])
@@ -247,18 +260,18 @@ def render_live_market():
     # ================= SELECTOR DINÁMICO DE ESTRATEGIA =================
     st.subheader("⚙️ Configuración del Radar Multi-Estrategia")
     col_ctrl1, col_ctrl2, col_ctrl3 = st.columns(3)
-    
-    with col_ctrl1: 
-        asset_choice = st.selectbox("Activo a analizar:", ["Bitcoin", "Oro"], key="asset_live_choice")
-        
-    with col_ctrl2: 
+
+    with col_ctrl1:
+        asset_choice = st.selectbox("Activo a analizar:", ACTIVOS_DISPONIBLES, key="asset_live_choice")
+
+    with col_ctrl2:
         estrategia = st.selectbox("🎯 Estrategia a Operar:", [
             "📊 Confluencia Clásica (Tendencia + RSI)",
             "🌅 Primera Vela (Ruptura ORB)",
             "🧲 Cazador de Pullbacks (Rebote EMA 50)"
         ], key="strat_selector")
-        
-    with col_ctrl3: 
+
+    with col_ctrl3:
         # ADAPTACIÓN AUTOMÁTICA DEL INTERVALO SEGÚN LA ESTRATEGIA
         if "Primera Vela" in estrategia:
             selected_timeframe = st.selectbox("Intervalo de Gráfico:", ["15 Minutos (15m)", "5 Minutos (5m)"], key="global_timeframe_orb")
@@ -269,7 +282,16 @@ def render_live_market():
         else:
             selected_timeframe = st.selectbox("Intervalo de Gráfico:", ["15 Minutos (15m)", "1 Hora (1h)", "4 Horas (4h)", "1 Día (1D)", "1 Semana (1W)", "1 Mes (1M)"], index=3, key="global_timeframe_clas")
 
+    # Control deslizable propio del Cazador de Pullbacks (antes era un número fijo escondido)
+    umbral_pullback_pct = 0.35
+    if "Pullbacks" in estrategia:
+        umbral_pullback_pct = st.slider("Sensibilidad del gatillo (% de cercanía a la EMA 50):", 0.10, 1.00, 0.35, 0.05, key="pullback_threshold")
+        st.caption("Más bajo = gatillo más estricto (menos señales, más precisas). Más alto = más señales, más falsas alarmas.")
+
     market_data, market_history = load_data(selected_timeframe)
+
+    if asset_choice == "Petróleo":
+        st.caption("⚠️ Recuerda: el Petróleo (CL=F) no cotiza 24/7. Fuera de horario de mercado el precio puede aparecer congelado.")
 
     # Alertas Rápidas
     active_alerts = []
@@ -281,11 +303,15 @@ def render_live_market():
         for alert in active_alerts: st.warning(alert)
     st.markdown("---")
 
-    # ================= PASO 2 =================
+    # ================= PASO 2: CLIMA MACRO (5 tarjetas) =================
     st.subheader("🌐 PASO 2: Clima Macroeconómico")
-    col1, col2, col3, col4 = st.columns(4)
-    btc, gold, dxy, bond = market_data.get("Bitcoin", {}), market_data.get("Oro", {}), market_data.get("DXY (Dólar)", {}), market_data.get("Bonos 10Y", {})
-    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    btc = market_data.get("Bitcoin", {})
+    gold = market_data.get("Oro", {})
+    oil = market_data.get("Petróleo", {})
+    dxy = market_data.get("DXY (Dólar)", {})
+    bond = market_data.get("Bonos 10Y", {})
+
     def render_mobile_card(col, title, info, is_currency=True):
         p, chg = info.get('price', 0), info.get('change', 0)
         p_str = f"${p:,.2f}" if is_currency else f"{p:,.2f}"
@@ -294,21 +320,22 @@ def render_live_market():
         col.markdown(f"""
         <div style="background-color: #111827; padding: 10px; border-radius: 6px; border: 1px solid #1f2937; text-align: center;">
             <div style="font-size: 11px; color: #9ca3af; margin-bottom: 4px;">{title}</div>
-            <div style="font-size: 24px; font-weight: bold; color: #f3f4f6; white-space: nowrap;">{p_str}</div>
+            <div style="font-size: 22px; font-weight: bold; color: #f3f4f6; white-space: nowrap;">{p_str}</div>
             <div style="font-size: 11px; color: {color}; font-weight: 600; margin-top: 3px;">{sign}{chg:.2f}%</div>
         </div>
         """, unsafe_allow_html=True)
 
     render_mobile_card(col1, "Bitcoin", btc)
     render_mobile_card(col2, "Oro", gold)
-    render_mobile_card(col3, "DXY", dxy, False)
-    render_mobile_card(col4, "Bono 10Y", bond, False)
+    render_mobile_card(col3, "Petróleo", oil)
+    render_mobile_card(col4, "DXY", dxy, False)
+    render_mobile_card(col5, "Bono 10Y", bond, False)
     st.markdown("---")
 
-    # ================= PASO 3 =================
+    # ================= PASO 3: MATRIZ ICT =================
     st.subheader(f"🧩 PASO 3: Matriz Institucional (ICT) - {asset_choice}")
     st.caption("Esta matriz busca de forma automática las trampas de liquidez en el mercado.")
-    
+
     mtf_data = load_mtf_data(asset_choice)
     if mtf_data:
         def get_mtf_row(timeframe, role, df):
@@ -332,7 +359,7 @@ def render_live_market():
         st.info("Cargando datos institucionales...")
     st.markdown("---")
 
-    # ================= MÓDULOS DE LECTURA DE LA ESTRATEGIA EN VIVO =================
+    # ================= PANEL EXCLUSIVO ORB (si aplica) =================
     orb_high, orb_low = None, None
     c_close_actual = market_data.get(asset_choice, {}).get('price', 0.0)
 
@@ -341,8 +368,8 @@ def render_live_market():
         if orb_high and orb_low:
             st.markdown(f"### 🎯 Panel de Estrategia: Primera Vela (ORB)")
             estado_orb = "⏳ Dentro del Rango de Apertura (No Operar Todavía)"
-            color_orb = "#6b7280" 
-            
+            color_orb = "#6b7280"
+
             if c_close_actual > orb_high:
                 estado_orb = "🟢 RUPTURA ALCISTA CONFIRMADA (Gatillo de Compra Activo)"
                 color_orb = "#10b981"
@@ -350,13 +377,16 @@ def render_live_market():
                 estado_orb = "🔴 RUPTURA BAJISTA CONFIRMADA (Gatillo de Venta Activo)"
                 color_orb = "#ef4444"
 
+            dist_techo_pct = ((orb_high - c_close_actual) / c_close_actual * 100) if c_close_actual else 0
+            dist_piso_pct = ((c_close_actual - orb_low) / c_close_actual * 100) if c_close_actual else 0
+
             st.markdown(f"""
             <div style="background-color: #111827; padding: 15px; border-radius: 8px; border: 1px solid {color_orb}; margin-bottom: 15px;">
                 <h4 style="color: {color_orb}; margin-top:0;">{estado_orb}</h4>
                 <p style="color: #d1d5db; margin-bottom: 5px;">Precio Actual en Vivo: <b>${c_close_actual:,.2f}</b></p>
                 <ul style="color: #9ca3af; font-size: 14px; margin-bottom: 0;">
-                    <li><b>Línea de Techo (Resistencia ORB):</b> ${orb_high:,.2f}</li>
-                    <li><b>Línea de Piso (Soporte ORB):</b> ${orb_low:,.2f}</li>
+                    <li><b>Línea de Techo (Resistencia ORB):</b> ${orb_high:,.2f} ({dist_techo_pct:+.2f}% de distancia)</li>
+                    <li><b>Línea de Piso (Soporte ORB):</b> ${orb_low:,.2f} ({dist_piso_pct:+.2f}% de distancia)</li>
                 </ul>
             </div>
             """, unsafe_allow_html=True)
@@ -365,7 +395,7 @@ def render_live_market():
 
     # ================= PASO 4: EL GRÁFICO DINÁMICO =================
     st.subheader(f"📈 PASO 4: Gráfico Dinámico y Traductor [{selected_timeframe}]")
-    
+
     current_close, current_ema50, current_ema200, current_rsi = 0, 0, 0, 50
     if asset_choice in market_history:
         df_asset = market_history[asset_choice].copy()
@@ -377,8 +407,8 @@ def render_live_market():
         current_ema50 = df_asset["EMA_50"].iloc[-1]
         current_ema200 = df_asset["EMA_200"].iloc[-1]
         current_rsi = df_asset["RSI"].iloc[-1]
-        
-        selected_info = btc if asset_choice == "Bitcoin" else gold
+
+        selected_info = market_data.get(asset_choice, {})
         p_low, p_high, p_vol = selected_info.get("low", 0), selected_info.get("high", 0), selected_info.get("volume", 0)
 
         sentiment_score = int(np.clip(current_rsi * 1.2, 10, 90))
@@ -398,19 +428,20 @@ def render_live_market():
             if asset_choice == "Bitcoin":
                 st.markdown("* **Suministro Circulante:** `20.06M BTC` / Máximo: `21.00M BTC`")
                 st.markdown("* **Dominancia de Mercado:** `~58.61%` | **Clasificación:** `#1`")
+            elif asset_choice == "Petróleo":
+                st.markdown("* **Contrato:** WTI Crude Oil Futures (CL=F), cotiza en USD por barril.")
 
         # ADAPTACIÓN VISUAL DEL GRÁFICO
         fig = go.Figure()
         fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
-        
+
         if "Pullbacks" in estrategia:
-            # Resaltar la EMA 50 para visualizar rebotes
             fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="#fbbf24", width=3.5), name="EMA 50 (Soporte/Resistencia)"))
             fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.0), opacity=0.4, name="EMA 200"))
         else:
             fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
             fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
-        
+
         if "Primera Vela" in estrategia and orb_high and orb_low:
             fig.add_hline(y=orb_high, line_dash="dash", line_color="#10b981", annotation_text="Techo 1ra Vela", annotation_position="top left")
             fig.add_hline(y=orb_low, line_dash="dash", line_color="#ef4444", annotation_text="Piso 1ra Vela", annotation_position="bottom left")
@@ -422,7 +453,7 @@ def render_live_market():
         dxy_chg, bond_chg = dxy.get('change', 0), bond.get('change', 0)
         dxy_status = "BUENO para el riesgo." if dxy_chg < 0 else "PRECAUCIÓN. Presión bajista."
         bond_status = "DESFAVORABLE." if bond_chg > 0 else "FAVORABLE."
-        
+
         ema_structure = "Alcista (EMA 50 > EMA 200)." if current_ema50 > current_ema200 else "Bajista (EMA 50 < EMA 200)."
         price_battle = "Precio sobre la EMA 50 (Soporte)." if current_close > current_ema50 else "Precio bajo la EMA 50 (Resistencia)."
 
@@ -431,7 +462,7 @@ def render_live_market():
 
         # ================= ALGORITMO FINAL (DINÁMICO SEGÚN ESTRATEGIA) =================
         st.markdown("### 🤖 Decisión del Algoritmo:")
-        
+
         if "Clásica" in estrategia:
             if current_close > current_ema50 and current_rsi < 70 and current_ema50 > current_ema200:
                 st.success("🟢 **ESTADO VERDE (CONFLUENCIA CLÁSICA):** Confluencia Alcista. Buen escenario para operar a favor de la tendencia.")
@@ -441,25 +472,39 @@ def render_live_market():
                 st.error("🔴 **ESTADO ROJO:** Riesgo técnico severo. Evitar operar o usar stop loss ajustado.")
 
         elif "Primera Vela" in estrategia:
-            if current_close > orb_high:
-                st.success("🟢 **INSTRUCCIÓN ORB:** Ruptura Alcista. Posiciona tus compras (Cuidado con los pullbacks falsos).")
-            elif current_close > 0 and current_close < orb_low:
-                st.error("🔴 **INSTRUCCIÓN ORB:** Ruptura Bajista. Posiciona tus ventas en corto (Short).")
+            # Confirmación de volumen de la ruptura (variante nueva)
+            vol_actual = df_asset["Volume"].iloc[-1] if "Volume" in df_asset.columns and len(df_asset) > 0 else 0
+            vol_promedio = df_asset["Volume"].tail(20).mean() if "Volume" in df_asset.columns and len(df_asset) >= 20 else vol_actual
+            if vol_promedio and vol_actual > vol_promedio * 1.2:
+                confirmacion_vol = "🔥 Ruptura con volumen fuerte (más confiable)."
+            else:
+                confirmacion_vol = "⚠️ Ruptura con volumen débil (cuidado, podría ser una trampa falsa)."
+
+            if orb_high and current_close > orb_high:
+                st.success(f"🟢 **INSTRUCCIÓN ORB:** Ruptura Alcista. Posiciona tus compras. {confirmacion_vol}")
+            elif orb_low and current_close > 0 and current_close < orb_low:
+                st.error(f"🔴 **INSTRUCCIÓN ORB:** Ruptura Bajista. Posiciona tus ventas en corto (Short). {confirmacion_vol}")
             else:
                 st.warning("⏳ **INSTRUCCIÓN ORB:** Paciencia. El precio no ha logrado romper el rango de apertura.")
 
         elif "Pullbacks" in estrategia:
-            dist_pct = abs(current_close - current_ema50) / current_ema50 * 100
+            dist_pct = abs(current_close - current_ema50) / current_ema50 * 100 if current_ema50 else 0
             if current_close > current_ema50:
-                if dist_pct <= 0.35:
-                    st.success(f"🟢 **GATILLO DE PULLBACK (COMPRA):** El precio retrocedió y está tocando la EMA 50. ¡Comprar ahora!")
+                if dist_pct <= umbral_pullback_pct:
+                    if current_rsi < 75:
+                        st.success(f"🟢 **GATILLO DE PULLBACK (COMPRA):** El precio retrocedió y está tocando la EMA 50, con RSI sano ({current_rsi:.1f}). ¡Comprar ahora!")
+                    else:
+                        st.warning(f"⚠️ **PRECAUCIÓN:** El precio toca la EMA 50, pero el RSI está en sobrecompra extrema ({current_rsi:.1f} > 75). Espera confirmación antes de comprar.")
                 else:
-                    st.warning(f"⏳ **ESPERANDO CAÍDA A LA EMA:** Tendencia alcista, pero el precio está alto. Espera a que baje a tocar la línea amarilla.")
+                    st.warning(f"⏳ **ESPERANDO CAÍDA A LA EMA:** Tendencia alcista, pero el precio está a {dist_pct:.2f}% de la línea amarilla. Espera a que baje.")
             else:
-                if dist_pct <= 0.35:
-                    st.error(f"🔴 **GATILLO DE PULLBACK (VENTA):** El precio rebotó hacia arriba y tocó la EMA 50. ¡Vender ahora!")
+                if dist_pct <= umbral_pullback_pct:
+                    if current_rsi > 25:
+                        st.error(f"🔴 **GATILLO DE PULLBACK (VENTA):** El precio rebotó y tocó la EMA 50, con RSI en zona normal ({current_rsi:.1f}). ¡Vender ahora!")
+                    else:
+                        st.warning(f"⚠️ **PRECAUCIÓN:** El precio toca la EMA 50, pero el RSI está en sobreventa extrema ({current_rsi:.1f} < 25). Espera confirmación antes de vender.")
                 else:
-                    st.warning(f"⏳ **ESPERANDO REBOTE A LA EMA:** Tendencia bajista, pero el precio ya cayó mucho. Espera a que suba a tocar la línea amarilla.")
+                    st.warning(f"⏳ **ESPERANDO REBOTE A LA EMA:** Tendencia bajista, pero el precio está a {dist_pct:.2f}% de la línea amarilla. Espera a que suba.")
 
 # Ejecutar el fragmento en vivo
 render_live_market()
@@ -467,10 +512,10 @@ render_live_market()
 st.markdown("---")
 
 # ==========================================
-# PASO 5: BITÁCORA Y NUBE
+# PASO 5: BITÁCORA DE OPERACIONES (Apertura / Cierre Parcial / Cierre Total)
 # ==========================================
-st.subheader("💼 PASO 5: Registro de Operaciones y Bitácora")
-st.caption("Registra tus compras aquí. El sistema cruzará tus datos con el mercado en vivo para calcular tus ganancias o pérdidas reales.")
+st.subheader("💼 PASO 5: Bitácora de Operaciones")
+st.caption("Registra cada movimiento: la Apertura (cuando compras) y luego cada Cierre (cuando vendes, total o parcial). Esto calcula tu Ganancia Realizada real.")
 
 @st.cache_resource(ttl=60)
 def get_sheet_data():
@@ -482,7 +527,7 @@ def get_sheet_data():
         sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1k-H50JiL6U41E6ne8qcmHeSvaoC8HCTe9DqWIQlP-Xo/edit").sheet1
         registros = sheet.get_all_records()
         return sheet, pd.DataFrame(registros)
-    except Exception as e:
+    except Exception:
         return None, pd.DataFrame()
 
 worksheet, df_trades = get_sheet_data()
@@ -490,63 +535,77 @@ worksheet, df_trades = get_sheet_data()
 if worksheet is None:
     st.error("⚠️ No se pudo conectar a Google Sheets. Verifica los Secretos en Streamlit.")
 
+with st.expander("ℹ️ IMPORTANTE: encabezados requeridos en tu Google Sheet", expanded=False):
+    st.code("Fecha | Activo | Tipo_Movimiento | Cantidad | Precio | Precio_Entrada_Ref | Ganancia_Realizada_USD", language=None)
+    st.caption("La fila 1 de tu hoja debe tener exactamente estos nombres de columna, en este orden.")
+
 with st.form("registro_operacion", clear_on_submit=True):
-    col_a, col_b, col_c, col_d = st.columns(4)
+    col_a, col_b, col_c = st.columns(3)
     with col_a:
-        nuevo_activo = st.selectbox("Activo", ["Bitcoin", "Oro"], key="reg_asset")
+        reg_activo = st.selectbox("Activo", ACTIVOS_DISPONIBLES, key="reg_asset")
     with col_b:
-        nuevo_tipo = st.selectbox("Tipo", ["Compra"], key="reg_type")
+        reg_tipo_mov = st.selectbox("Tipo de Movimiento", ["Apertura (Compra)", "Cierre Parcial 50% (Venta)", "Cierre Total (Venta)"], key="reg_tipo_mov")
     with col_c:
-        nueva_cantidad = st.number_input("Cantidad", min_value=0.00001, format="%.5f", key="reg_qty")
+        reg_cantidad = st.number_input("Cantidad de este movimiento", min_value=0.00001, format="%.5f", key="reg_qty")
+
+    col_d, col_e = st.columns(2)
     with col_d:
-        market_data_temp, _ = load_data("1 Día (1D)")
-        raw_precio = market_data_temp.get(nuevo_activo, {}).get('price', 60000.0)
-        precio_seguro = float(raw_precio) if raw_precio > 0 else (60000.0 if nuevo_activo == "Bitcoin" else 2000.0)
-        nuevo_precio = st.number_input("Precio Compra ($)", value=precio_seguro, min_value=0.1, format="%.2f", key="reg_price")
-    
-    submit_trade = st.form_submit_button("➕ Registrar Operación")
-    
-    if submit_trade and nueva_cantidad > 0 and worksheet is not None:
+        _market_temp, _ = load_data("1 Día (1D)")
+        _raw_precio = _market_temp.get(reg_activo, {}).get('price', 0.0)
+        _precio_def = float(_raw_precio) if _raw_precio and _raw_precio > 0 else PRECIO_DEFECTO.get(reg_activo, 100.0)
+        reg_precio = st.number_input("Precio de este movimiento ($)", value=_precio_def, min_value=0.01, format="%.2f", key="reg_price")
+    with col_e:
+        reg_precio_entrada_ref = st.number_input(
+            "Precio de Entrada Original (solo si es un Cierre)",
+            value=_precio_def, min_value=0.0, format="%.2f", key="reg_price_ref"
+        )
+        st.caption("Ignora este campo si el movimiento es 'Apertura'.")
+
+    submit_trade = st.form_submit_button("➕ Registrar Movimiento")
+
+    if submit_trade and reg_cantidad > 0 and worksheet is not None:
         fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        inversion = nueva_cantidad * nuevo_precio
-        nueva_fila = [fecha_actual, nuevo_activo, nuevo_tipo, float(nueva_cantidad), float(nuevo_precio), float(inversion)]
-        
+        es_cierre = "Cierre" in reg_tipo_mov
+        ganancia_realizada = (reg_precio - reg_precio_entrada_ref) * reg_cantidad if es_cierre else 0.0
+
+        nueva_fila = [
+            fecha_actual, reg_activo, reg_tipo_mov, float(reg_cantidad),
+            float(reg_precio), float(reg_precio_entrada_ref) if es_cierre else "",
+            float(ganancia_realizada) if es_cierre else ""
+        ]
+
         try:
             worksheet.append_row(nueva_fila)
-            st.success("✅ ¡Operación registrada en la nube!")
+            st.success("✅ ¡Movimiento registrado en la nube!")
             st.rerun()
         except Exception as e:
             st.error(f"Error al escribir: {e}")
 
-if not df_trades.empty and 'Activo' in df_trades.columns:
+if not df_trades.empty and 'Tipo_Movimiento' in df_trades.columns:
+    df_trades['Ganancia_Realizada_USD'] = pd.to_numeric(df_trades['Ganancia_Realizada_USD'], errors='coerce').fillna(0)
     df_trades['Cantidad'] = pd.to_numeric(df_trades['Cantidad'], errors='coerce')
-    df_trades['Precio_Entrada'] = pd.to_numeric(df_trades['Precio_Entrada'], errors='coerce')
-    df_trades['Inversion_Inicial_USD'] = pd.to_numeric(df_trades['Inversion_Inicial_USD'], errors='coerce')
-    
-    market_data_temp, _ = load_data("1 Día (1D)")
-    precios_actuales = {"Bitcoin": market_data_temp.get("Bitcoin", {}).get('price', 0), "Oro": market_data_temp.get("Oro", {}).get('price', 0)}
-    df_trades['Precio_Actual_Mercado'] = df_trades['Activo'].map(precios_actuales)
-    df_trades['Valor_Actual_USD'] = df_trades['Cantidad'] * df_trades['Precio_Actual_Mercado']
-    df_trades['Ganancia/Perdida_USD'] = df_trades['Valor_Actual_USD'] - df_trades['Inversion_Inicial_USD']
-    
-    inversion_total = df_trades['Inversion_Inicial_USD'].sum()
-    valor_actual_total = df_trades['Valor_Actual_USD'].sum()
-    ganancia_neta = valor_actual_total - inversion_total
-    rendimiento_total = (ganancia_neta / inversion_total) * 100 if inversion_total > 0 else 0
-    
-    st.markdown("### 📊 Rendimiento del Portafolio en Vivo")
-    res_col1, res_col2, res_col3 = st.columns(3)
-    res_col1.metric("Inversión Total", f"${inversion_total:,.2f}")
-    res_col2.metric("Valor Actual", f"${valor_actual_total:,.2f}", f"{ganancia_neta:,.2f} USD")
-    res_col3.metric("Rendimiento Neto", f"{rendimiento_total:.2f}%")
-    
+    df_trades['Precio'] = pd.to_numeric(df_trades['Precio'], errors='coerce')
+
+    cierres = df_trades[df_trades['Tipo_Movimiento'].str.contains("Cierre", na=False)]
+    aperturas = df_trades[df_trades['Tipo_Movimiento'].str.contains("Apertura", na=False)]
+
+    ganancia_total = cierres['Ganancia_Realizada_USD'].sum()
+    n_cierres = len(cierres)
+    ganadoras = (cierres['Ganancia_Realizada_USD'] > 0).sum()
+    perdedoras = (cierres['Ganancia_Realizada_USD'] < 0).sum()
+    tasa_exito = (ganadoras / n_cierres * 100) if n_cierres > 0 else 0
+
+    st.markdown("### 📊 Rendimiento Realizado (solo cierres, no posiciones abiertas)")
+    res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+    res_col1.metric("Ganancia Realizada Total", f"${ganancia_total:,.2f}")
+    res_col2.metric("N° de Cierres", f"{n_cierres}")
+    res_col3.metric("Tasa de Éxito", f"{tasa_exito:.1f}%")
+    res_col4.metric("N° de Aperturas", f"{len(aperturas)}")
+
     st.dataframe(df_trades.style.format({
         "Cantidad": "{:.5f}",
-        "Precio_Entrada": "${:,.2f}",
-        "Inversion_Inicial_USD": "${:,.2f}",
-        "Precio_Actual_Mercado": "${:,.2f}",
-        "Valor_Actual_USD": "${:,.2f}",
-        "Ganancia/Perdida_USD": "${:,.2f}"
+        "Precio": "${:,.2f}",
+        "Ganancia_Realizada_USD": "${:,.2f}"
     }), use_container_width=True)
 else:
-    st.info("No tienes operaciones registradas. Ingresa una compra en el formulario de arriba.")
+    st.info("No tienes movimientos registrados todavía. Registra una Apertura en el formulario de arriba para empezar.")
