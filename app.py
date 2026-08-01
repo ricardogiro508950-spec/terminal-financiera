@@ -17,11 +17,12 @@ from utils.logger import log
 from core.market_engine import load_data, get_orb_levels, load_mtf_data
 from core.risk_engine import calculate_position_size
 from indicators.math_indicators import calculate_rsi, calculate_atr
-from core.backtest_engine import run_backtest_ema_crossover # <--- NUEVO MOTOR IMPORTADO
+from core.backtest_engine import run_backtest_ema_crossover
+from core.ai_engine import calculate_ai_score # <--- NUEVO MOTOR DE IA IMPORTADO
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v6.1", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v6.2", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # INYECCIÓN DE CSS
@@ -62,16 +63,16 @@ market_data_init, market_history_init = load_data("1 Hora")
 # ==========================================
 st.sidebar.image("https://img.icons8.com/color/96/000000/bullish.png", width=60)
 st.sidebar.title("Menú Oculoos")
-modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest (NUEVO)"])
+modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest"])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v6.1 | Institucional")
+st.sidebar.caption("Oculoos Trading v6.2 | Institucional")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal":
-    st.title("👁️ Oculoos Trading v6.1 | Terminal Real")
-    st.caption("Arquitectura Modular Activa. Motores operando en segundo plano.")
+    st.title("👁️ Oculoos Trading v6.2 | Terminal Real + IA")
+    st.caption("Motores de Inteligencia Artificial y Riesgo operando simultáneamente.")
     st.markdown("---")
 
     st.subheader("🛡️ PASO 1: Auditoría de Capital y Riesgo")
@@ -133,6 +134,21 @@ if modo_app == "📊 Terminal Principal":
         render_mc(c2, "Oro", market_data.get("Oro", {}))
         render_mc(c3, "DXY", market_data.get("DXY (Dólar)", {}), False)
         render_mc(c4, "Bono 10Y", market_data.get("Bonos 10Y", {}), False)
+
+        # MÓDULO DE INTELIGENCIA ARTIFICIAL (NUEVO BLOQUE VISUAL)
+        if asset_choice in market_history:
+            df_ai = market_history[asset_choice]
+            ai_score, ai_verdict, ai_reasons = calculate_ai_score(df_ai)
+            
+            st.markdown("---")
+            st.subheader("🧠 Análisis Predictivo de Inteligencia Artificial")
+            ai_col1, ai_col2 = st.columns([1, 2])
+            with ai_col1:
+                st.metric("Score Algorítmico IA", f"{ai_score} / 100 pts", delta=ai_verdict)
+            with ai_col2:
+                st.markdown("**Factores evaluados por el modelo:**")
+                for r in ai_reasons:
+                    st.markdown(f"- {r}")
 
         orb_high, orb_low, c_close_actual = None, None, market_data.get(asset_choice, {}).get('price', 0.0)
         if "Primera Vela" in estrategia:
@@ -286,9 +302,9 @@ elif modo_app == "🎮 Simulador Completo":
         motor_simulador_vivo()
 
 # =====================================================================
-# MODO 3: LABORATORIO DE BACKTESTING (NUEVO)
+# MODO 3: LABORATORIO DE BACKTESTING
 # =====================================================================
-elif modo_app == "🧪 Laboratorio Backtest (NUEVO)":
+elif modo_app == "🧪 Laboratorio Backtest":
     st.title("🧪 Laboratorio Cuantitativo (Backtesting)")
     st.caption("Prueba estrategias en el pasado para saber si funcionan matemáticamente.")
     st.markdown("---")
@@ -315,6 +331,6 @@ elif modo_app == "🧪 Laboratorio Backtest (NUEVO)":
             pnl_color = "normal" if resultados['pnl_pct'] > 0 else "off"
             res3.metric("Retorno de Inversión (PnL)", f"{resultados['pnl_pct']}%", delta="Positivo" if resultados['pnl_pct'] > 0 else "Negativo", delta_color=pnl_color)
             
-            st.caption("Nota: El backtest asume condiciones ideales sin deslizamiento (slippage) ni comisiones de exchange en esta versión rápida.")
+            st.caption("Nota: El backtest asume condiciones ideales sin deslizamiento ni comisiones de exchange en esta versión.")
         else:
             st.error("No hay suficientes datos históricos para correr la prueba.")
