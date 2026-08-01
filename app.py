@@ -11,7 +11,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.49", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.52", page_icon="👁️", layout="wide"
 )
 
 # ==========================================
@@ -40,8 +40,8 @@ h3 {
 </style>
 """, unsafe_allow_html=True)
 
-st.title("👁️ Oculoos Trading v5.49 (Visual Pro)")
-st.caption("Filtro de Volumen, ATR Dinámico, Gráficos Interactivos y Blindaje de Memoria")
+st.title("👁️ Oculoos Trading v5.52 (Visual Pro)")
+st.caption("Filtro de Volumen, ATR Dinámico, Gráficos Interactivos con Dibujo y Blindaje de Memoria")
 st.markdown("---")
 
 ACTIVOS_DISPONIBLES = ["Bitcoin", "Oro", "Petróleo"]
@@ -49,13 +49,17 @@ TICKER_MAP = {"Bitcoin": "BTC-USD", "Oro": "GC=F", "Petróleo": "CL=F"}
 PRECIO_DEFECTO = {"Bitcoin": 60000.0, "Oro": 2000.0, "Petróleo": 75.0}
 FEE_BINANCE = 0.001 # 0.1% comisión estándar de Binance
 
-# CONFIGURACIÓN INTERACTIVA DE GRÁFICOS (PC Y MÓVIL)
+# CONFIGURACIÓN INTERACTIVA DE GRÁFICOS (PC Y MÓVIL) + HERRAMIENTAS DE DIBUJO
 PLOTLY_CONFIG = {
     'scrollZoom': True,
     'displayModeBar': True,
     'displaylogo': False,
+    'modeBarButtonsToAdd': ['drawline', 'drawrect', 'eraseshape'],
     'modeBarButtonsToRemove': ['lasso2d', 'select2d']
 }
+
+# ESTILO PERSONALIZADO PARA LOS DIBUJOS DEL USUARIO (CELESTE NEÓN)
+USER_DRAWING_STYLE = dict(line_color="#00FFFF", fillcolor="rgba(0, 255, 255, 0.15)", line_width=2)
 
 # ==========================================
 # INICIALIZACIÓN DE VARIABLES (BLINDAJE DE ERRORES)
@@ -365,13 +369,14 @@ def render_live_market():
             fig.add_hline(y=orb_high, line_dash="dash", line_color="#10b981", annotation_text="Techo ORB")
             fig.add_hline(y=orb_low, line_dash="dash", line_color="#ef4444", annotation_text="Piso ORB")
 
-        # ALTURA AUMENTADA Y ZOOM CONFIGURADO
+        # ALTURA AUMENTADA, ZOOM CONFIGURADO Y COLOR NEÓN PARA DIBUJOS
         fig.update_layout(
             template="plotly_dark", 
             height=650, 
             margin=dict(l=20, r=20, t=40, b=20),
             dragmode='zoom',
-            xaxis=dict(rangeslider=dict(visible=False))
+            xaxis=dict(rangeslider=dict(visible=False)),
+            newshape=USER_DRAWING_STYLE
         )
         st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
@@ -473,7 +478,7 @@ if st.session_state.get('sim_estado', 'INACTIVO') == 'ABIERTO':
         
         st.caption(f"Para quedar en Break-Even (ganancia cero), debes cubrir las comisiones de entrada y salida (Total fees: ${(fees_pagados + fee_salida):.2f}).")
 
-        # Gráfico del simulador aumentado y con zoom
+        # Gráfico del simulador aumentado, zoom y dibujo
         if asset in m_history:
             df_sim = m_history[asset].tail(80)
             fig_sim = go.Figure(data=[go.Candlestick(x=df_sim.index, open=df_sim["Open"], high=df_sim["High"], low=df_sim["Low"], close=df_sim["Close"], name="Precio")])
@@ -483,7 +488,8 @@ if st.session_state.get('sim_estado', 'INACTIVO') == 'ABIERTO':
                 height=600, 
                 margin=dict(l=20, r=20, t=10, b=10),
                 dragmode='zoom',
-                xaxis=dict(rangeslider=dict(visible=False))
+                xaxis=dict(rangeslider=dict(visible=False)),
+                newshape=USER_DRAWING_STYLE
             )
             st.plotly_chart(fig_sim, use_container_width=True, config=PLOTLY_CONFIG)
 
