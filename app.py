@@ -79,6 +79,29 @@ modo_app = st.sidebar.radio("Área de trabajo:", [
     "📡 Centro de Alertas",
     "📚 Guía de Velas y 6 Pasos"
 ])
+
+# NUEVO: Menú desplegable con la explicación de cada sección (Acordeón)
+with st.sidebar.expander("ℹ️ ¿Qué hace cada sección?", expanded=False):
+    st.markdown("""
+    * **📊 Terminal Principal:** 
+    Análisis en vivo. Gestión matemática de riesgo, radar de estrategias, IA y patrones de velas para operar hoy.
+    
+    * **🎮 Simulador Completo:** 
+    Práctica en vivo con dinero virtual para entrenar entradas y salidas sin riesgo real.
+    
+    * **🧪 Lab. Backtest:** 
+    Prueba estrategias en el pasado para saber su Win Rate (Tasa de éxito) antes de usarlas.
+    
+    * **🔮 Monte Carlo:** 
+    Proyecta escenarios de precios futuros y calcula cuánto capital apostar usando el Criterio de Kelly.
+    
+    * **📡 Centro de Alertas:** 
+    Configuración de tu bot para recibir notificaciones a Telegram.
+    
+    * **📚 Guía de Velas:** 
+    Tu manual de bolsillo con imágenes sobre patrones, estructura y los 6 pasos de confluencia.
+    """)
+
 st.sidebar.markdown("---")
 st.sidebar.caption("Oculoos Trading v7.0 | Institucional")
 
