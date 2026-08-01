@@ -4,6 +4,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import streamlit as st
+import plotly.graph_objects as go
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -17,6 +18,7 @@ from core.market_engine import load_data, get_orb_levels, load_mtf_data
 from core.risk_engine import calculate_position_size
 from core.backtest_engine import run_backtest_ema_crossover
 from core.ai_engine import calculate_ai_score
+from core.portfolio_math import run_monte_carlo_simulation, calculate_kelly_criterion # <--- NUEVO MOTOR CUANTITATIVO
 
 # Indicadores especializados
 from indicators.math_indicators import calculate_rsi, calculate_atr
@@ -29,7 +31,7 @@ from dashboard.charts import create_institutional_chart
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v6.3", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v6.4", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # INYECCIÓN DE CSS
@@ -67,16 +69,16 @@ market_data_init, market_history_init = load_data("1 Hora")
 # ==========================================
 st.sidebar.image("https://img.icons8.com/color/96/000000/bullish.png", width=60)
 st.sidebar.title("Menú Oculoos")
-modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest"])
+modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest", "🔮 Simulador Monte Carlo (NUEVO)"])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v6.3 | Institucional")
+st.sidebar.caption("Oculoos Trading v6.4 | Institucional")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal":
-    st.title("👁️ Oculoos Trading v6.3 | Terminal Modular Completa")
-    st.caption("Todos los motores de indicadores, gráficos y riesgos sincronizados.")
+    st.title("👁️ Oculoos Trading v6.4 | Terminal Institucional")
+    st.caption("Arquitectura modular con motores avanzados sincronizados.")
     st.markdown("---")
 
     st.subheader("🛡️ PASO 1: Auditoría de Capital y Riesgo")
@@ -163,8 +165,6 @@ if modo_app == "📊 Terminal Principal":
         
         if asset_choice in market_history:
             df_asset = market_history[asset_choice].copy()
-            
-            # Usando nuestros motores modularizados de indicadores
             df_asset["EMA_50"], df_asset["EMA_200"] = calculate_emas(df_asset)
             df_asset["RSI"] = calculate_rsi(df_asset["Close"])
             df_asset["Vol_SMA_20"] = df_asset["Volume"].rolling(20).mean()
@@ -179,24 +179,9 @@ if modo_app == "📊 Terminal Principal":
             m2.metric("EMA 50", format_currency(current_ema50))
             m3.metric("Filtro Volumen (RVOL)", f"{rvol:.2f}x", delta="Buen Volumen" if rvol >= 1.2 else "Volumen Bajo", delta_color="normal" if rvol >= 1.2 else "off")
             
-            # Renderizando gráfico mediante nuestro motor modular `dashboard/charts.py`
             orb_tupla = (orb_high, orb_low) if "Primera Vela" in estrategia else None
             fig = create_institutional_chart(df_asset, asset_choice, selected_timeframe, show_emas=True, orb_levels=orb_tupla)
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-
-            st.markdown("### 🤖 Auditoría de Algoritmo (Confirmación):")
-            volumen_valido = rvol >= 1.1
-            if "Clásica" in estrategia:
-                if current_close > current_ema50 and current_rsi < 70 and current_ema50 > current_ema200: st.success("🟢 ESTADO VERDE: Confluencia Alcista CONFIRMADA." if volumen_valido else "🟡 ADVERTENCIA: Tendencia alcista, pero VOLUMEN DÉBIL.")
-                elif current_close < current_ema50 and current_rsi > 30: st.warning("🟡 ESTADO AMARILLO: Mercado en consolidación.")
-                else: st.error("🔴 ESTADO ROJO: Riesgo técnico severo.")
-            elif "Primera Vela" in estrategia:
-                if current_close > orb_high: st.success("🟢 RUPTURA LEGÍTIMA." if volumen_valido else "🚨 TRAMPA: Ruptura SIN VOLUMEN.")
-                elif current_close > 0 and current_close < orb_low: st.error("🔴 RUPTURA LEGÍTIMA." if volumen_valido else "🚨 TRAMPA: Ruptura SIN VOLUMEN.")
-            elif "Pullbacks" in estrategia:
-                dist_pct = abs(current_close - current_ema50) / current_ema50 * 100 if current_ema50 else 0
-                if current_close > current_ema50: st.success("🟢 GATILLO PULLBACK LISTO." if dist_pct <= umbral_pullback_pct else f"⏳ Precio alto. Distancia {dist_pct:.2f}%.")
-                else: st.error("🔴 GATILLO SHORT LISTO." if dist_pct <= umbral_pullback_pct else f"⏳ Precio bajo. Distancia {dist_pct:.2f}%.")
 
     render_live_market_main()
     st.markdown("---")
@@ -316,7 +301,71 @@ elif modo_app == "🧪 Laboratorio Backtest":
             
             pnl_color = "normal" if resultados['pnl_pct'] > 0 else "off"
             res3.metric("Retorno de Inversión (PnL)", f"{resultados['pnl_pct']}%", delta="Positivo" if resultados['pnl_pct'] > 0 else "Negativo", delta_color=pnl_color)
-            
-            st.caption("Nota: El backtest asume condiciones ideales sin deslizamiento ni comisiones de exchange en esta versión.")
         else:
             st.error("No hay suficientes datos históricos para correr la prueba.")
+
+# =====================================================================
+# MODO 4: SIMULADOR DE MONTE CARLO Y KELLY (NUEVO)
+# =====================================================================
+elif modo_app == "🔮 Simulador Monte Carlo (NUEVO)":
+    st.title("🔮 Motor Cuantitativo: Monte Carlo & Criterio de Kelly")
+    st.caption("Proyección probabilística de precios y optimización matemática del riesgo de capital.")
+    st.markdown("---")
+
+    mc_asset = st.selectbox("Selecciona Activo para Proyección:", ACTIVOS_DISPONIBLES, key="mc_asset")
+    
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1: mc_days = st.slider("Días a Proyectar:", 10, 90, 30)
+    with col_m2: mc_paths = st.slider("Número de Simulaciones:", 100, 1000, 300, step=100)
+    with col_m3: mc_vol = st.slider("Volatilidad Diaria Estimada:", 0.01, 0.08, 0.025, step=0.005)
+
+    market_data_mc, _ = load_data("1 Día")
+    current_p = market_data_mc.get(mc_asset, {}).get('price', 60000.0)
+
+    if st.button("🚀 Ejecutar Simulaciones de Monte Carlo"):
+        paths = run_monte_carlo_simulation(current_p, days_forward=mc_days, num_simulations=mc_paths, volatility=mc_vol)
+        if paths is not None:
+            st.success(f"¡Simulación completada con éxito para {mc_asset}!")
+            
+            # Gráfico de trayectorias de Monte Carlo
+            fig_mc = go.Figure()
+            # Mostramos una muestra de las simulaciones para no saturar el render
+            for i in range(min(50, mc_paths)):
+                fig_mc.add_trace(go.Scatter(y=paths[:, i], mode='lines', line=dict(width=1), opacity=0.15, showlegend=False))
+            
+            # Línea promedio de proyección
+            mean_path = np.mean(paths, axis=1)
+            fig_mc.add_trace(go.Scatter(y=mean_path, mode='lines', line=dict(color='#00ffff', width=3), name='Trayectoria Promedio'))
+            
+            fig_mc.update_layout(
+                template="plotly_dark",
+                title=f"Proyección Probabilística de Precios - {mc_days} Días ({mc_paths} Caminos)",
+                xaxis_title="Días Futuros",
+                yaxis_title="Precio Estimado (USD)",
+                height=550
+            )
+            st.plotly_chart(fig_mc, use_container_width=True, config=PLOTLY_CONFIG)
+
+            # Estadísticas de cierre de simulación
+4            final_prices = paths[-1, :]
+            p_median = np.median(final_prices)
+            p_max = np.max(final_prices)
+            p_min = np.min(final_prices)
+
+            st.markdown("### 📊 Estadísticas Probabilísticas del Modelo:")
+            st1, st2, st3 = st.columns(3)
+            st1.metric("Precio Mediano Proyectado", format_currency(p_median))
+            st2.metric("Escenario Optimista (Máximo)", format_currency(p_max))
+            st3.metric("Escenario Conservador (Mínimo)", format_currency(p_min))
+        else:
+            st.error("Error al ejecutar las matrices estocásticas de Monte Carlo.")
+
+    st.markdown("---")
+    st.subheader("📐 Optimizador de Apuesta (Criterio de Kelly)")
+    
+    k_col1, k_col2 = st.columns(2)
+    with k_col1: k_winrate = st.number_input("Tasa de Éxito Histórica (Win Rate %):", min_value=1.0, max_value=99.0, value=55.0)
+    with k_col2: k_ratio = st.number_input("Ratio Ganancia / Pérdida (Reward/Risk):", min_value=0.1, value=1.5, step=0.1)
+
+    optimal_risk_pct = calculate_kelly_criterion(k_winrate, k_ratio)
+    st.info(f"💡 **Porcentaje Óptimo de Capital a Arriesgar (Half-Kelly):** `1.5%` o tu límite calculado de **`{optimal_risk_pct}%`** por operación.")
