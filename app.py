@@ -1,28 +1,35 @@
 # app.py
 import json
 import datetime
-from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ==========================================
-# IMPORTACIONES MODULARES
+# IMPORTACIONES DE NUESTRA ARQUITECTURA MODULAR
 # ==========================================
-from utils.config import ACTIVOS_DISPONIBLES, PRECIO_DEFECTO, FEE_BINANCE, PLOTLY_CONFIG, USER_DRAWING_STYLE
+from utils.config import ACTIVOS_DISPONIBLES, PRECIO_DEFECTO, FEE_BINANCE, PLOTLY_CONFIG
 from utils.logger import log
+from utils.helpers import get_market_session_status, format_currency
 from core.market_engine import load_data, get_orb_levels, load_mtf_data
 from core.risk_engine import calculate_position_size
-from indicators.math_indicators import calculate_rsi, calculate_atr
 from core.backtest_engine import run_backtest_ema_crossover
-from core.ai_engine import calculate_ai_score # <--- NUEVO MOTOR DE IA IMPORTADO
+from core.ai_engine import calculate_ai_score
+
+# Indicadores especializados
+from indicators.math_indicators import calculate_rsi, calculate_atr
+from indicators.trend import calculate_emas
+from indicators.momentum import calculate_macd
+from indicators.volatility import calculate_bollinger_bands
+
+# Motor gráfico institucional
+from dashboard.charts import create_institutional_chart
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v6.2", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v6.3", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # INYECCIÓN DE CSS
@@ -47,9 +54,6 @@ if 'monto_inv_term' not in st.session_state: st.session_state.monto_inv_term = 2
 if 'sim_estado' not in st.session_state: st.session_state.sim_estado = 'INACTIVO'
 if 'sim_balance' not in st.session_state: st.session_state.sim_balance = 10000.0 
 if 'sim_pnl_historico' not in st.session_state: st.session_state.sim_pnl_historico = 0.0
-if 'sim_rsk_pct' not in st.session_state: st.session_state.sim_rsk_pct = 1.0
-if 'sim_sl_pct' not in st.session_state: st.session_state.sim_sl_pct = 5.0
-if 'monto_inv_sim' not in st.session_state: st.session_state.monto_inv_sim = 2000.0 
 if 'sim_fees_pagados' not in st.session_state: st.session_state.sim_fees_pagados = 0.0
 
 def update_monto_term():
@@ -65,14 +69,14 @@ st.sidebar.image("https://img.icons8.com/color/96/000000/bullish.png", width=60)
 st.sidebar.title("Menú Oculoos")
 modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest"])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v6.2 | Institucional")
+st.sidebar.caption("Oculoos Trading v6.3 | Institucional")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal":
-    st.title("👁️ Oculoos Trading v6.2 | Terminal Real + IA")
-    st.caption("Motores de Inteligencia Artificial y Riesgo operando simultáneamente.")
+    st.title("👁️ Oculoos Trading v6.3 | Terminal Modular Completa")
+    st.caption("Todos los motores de indicadores, gráficos y riesgos sincronizados.")
     st.markdown("---")
 
     st.subheader("🛡️ PASO 1: Auditoría de Capital y Riesgo")
@@ -94,18 +98,13 @@ if modo_app == "📊 Terminal Principal":
     st.session_state.monto_inv_term = tamano_posicion
 
     r_col1, r_col2 = st.columns(2)
-    with r_col1: st.error(f"**Pérdida Máxima (Riesgo):** ${riesgo_usd:.2f} USD")
-    with r_col2: st.success(f"**Límite Inversión Seguro:** ${tamano_posicion:.2f} USD")
+    with r_col1: st.error(f"**Pérdida Máxima (Riesgo):** {format_currency(riesgo_usd)}")
+    with r_col2: st.success(f"**Límite Inversión Seguro:** {format_currency(tamano_posicion)}")
     st.markdown("---")
 
     @st.fragment(run_every=5)
     def render_live_market_main():
-        try:
-            ny_now = datetime.datetime.now(ZoneInfo("America/New_York"))
-            session_status = "🟢 SESIÓN NY ABIERTA" if (ny_now.weekday() < 5) and (9 <= ny_now.hour < 16 or (ny_now.hour == 9 and ny_now.minute >= 30)) else "🔴 SESIÓN NY CERRADA"
-            ny_time_str = ny_now.strftime("%I:%M:%S %p")
-        except: ny_time_str, session_status = "Sincronizando...", "⏳ Verificando..."
-
+        ny_time_str, session_status = get_market_session_status()
         st.markdown(f"🕒 **Hora NY:** `{ny_time_str}` | **Estado:** {session_status}")
         st.markdown("---")
 
@@ -128,14 +127,14 @@ if modo_app == "📊 Terminal Principal":
         c1, c2, c3, c4 = st.columns(4)
         def render_mc(col, title, info, is_currency=True):
             p, chg = info.get('price', 0), info.get('change', 0)
-            p_str, color, sign = f"${p:,.2f}" if is_currency else f"{p:,.2f}", "#28a745" if chg >= 0 else "#dc3545", "+" if chg >= 0 else ""
+            p_str, color, sign = (format_currency(p) if is_currency else f"{p:,.2f}"), "#28a745" if chg >= 0 else "#dc3545", "+" if chg >= 0 else ""
             col.markdown(f"""<div style="background-color: #111827; padding: 10px; border-radius: 6px; border: 1px solid #1f2937; text-align: center;"><div style="font-size: 14px; color: #9ca3af;">{title}</div><div style="font-size: 28px; font-weight: bold; color: #f3f4f6;">{p_str}</div><div style="font-size: 14px; color: {color};">{sign}{chg:.2f}%</div></div>""", unsafe_allow_html=True)
         render_mc(c1, "Bitcoin", market_data.get("Bitcoin", {}))
         render_mc(c2, "Oro", market_data.get("Oro", {}))
         render_mc(c3, "DXY", market_data.get("DXY (Dólar)", {}), False)
         render_mc(c4, "Bono 10Y", market_data.get("Bonos 10Y", {}), False)
 
-        # MÓDULO DE INTELIGENCIA ARTIFICIAL (NUEVO BLOQUE VISUAL)
+        # MÓDULO DE INTELIGENCIA ARTIFICIAL
         if asset_choice in market_history:
             df_ai = market_history[asset_choice]
             ai_score, ai_verdict, ai_reasons = calculate_ai_score(df_ai)
@@ -152,20 +151,21 @@ if modo_app == "📊 Terminal Principal":
 
         orb_high, orb_low, c_close_actual = None, None, market_data.get(asset_choice, {}).get('price', 0.0)
         if "Primera Vela" in estrategia:
-            orb_high, orb_low, origen_orb = get_orb_levels(asset_choice)
+            orb_high, orb_low, _ = get_orb_levels(asset_choice)
             if orb_high and orb_low:
                 estado_orb, color_orb = "⏳ En Rango de Apertura", "#6b7280"
                 if c_close_actual > orb_high: estado_orb, color_orb = "🟢 RUPTURA ALCISTA (Busca Pullback)", "#10b981"
                 elif c_close_actual > 0 and c_close_actual < orb_low: estado_orb, color_orb = "🔴 RUPTURA BAJISTA (Busca Pullback)", "#ef4444"
-                st.markdown(f"""<div style="background-color: #111827; padding: 15px; border-radius: 8px; border: 1px solid {color_orb}; margin-top: 10px;"><h4 style="color: {color_orb}; font-size: 1.5rem; margin-top:0;">{estado_orb}</h4><p style="color: #d1d5db; font-size: 1.2rem;">Precio: <b>${c_close_actual:,.2f}</b></p><ul style="color: #9ca3af; font-size: 1.1rem;"><li><b>Techo:</b> ${orb_high:,.2f}</li><li><b>Piso:</b> ${orb_low:,.2f}</li></ul></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div style="background-color: #111827; padding: 15px; border-radius: 8px; border: 1px solid {color_orb}; margin-top: 10px;"><h4 style="color: {color_orb}; font-size: 1.5rem; margin-top:0;">{estado_orb}</h4><p style="color: #d1d5db; font-size: 1.2rem;">Precio: <b>{format_currency(c_close_actual)}</b></p><ul style="color: #9ca3af; font-size: 1.1rem;"><li><b>Techo:</b> {format_currency(orb_high)}</li><li><b>Piso:</b> {format_currency(orb_low)}</li></ul></div>""", unsafe_allow_html=True)
 
         st.markdown("---")
-        st.subheader(f"📈 Gráfico Cuantitativo [{selected_timeframe}]")
+        st.subheader(f"📈 Gráfico Cuantitativo Institucional [{selected_timeframe}]")
         
         if asset_choice in market_history:
             df_asset = market_history[asset_choice].copy()
-            df_asset["EMA_50"] = df_asset["Close"].ewm(span=50, adjust=False).mean()
-            df_asset["EMA_200"] = df_asset["Close"].ewm(span=200, adjust=False).mean() if len(df_asset)>=200 else df_asset["Close"].ewm(span=len(df_asset), adjust=False).mean()
+            
+            # Usando nuestros motores modularizados de indicadores
+            df_asset["EMA_50"], df_asset["EMA_200"] = calculate_emas(df_asset)
             df_asset["RSI"] = calculate_rsi(df_asset["Close"])
             df_asset["Vol_SMA_20"] = df_asset["Volume"].rolling(20).mean()
 
@@ -176,23 +176,12 @@ if modo_app == "📊 Terminal Principal":
             
             m1, m2, m3 = st.columns(3)
             m1.metric("RSI (Momento)", f"{current_rsi:.2f}")
-            m2.metric("EMA 50 (Soporte/Resist)", f"${current_ema50:,.2f}")
+            m2.metric("EMA 50", format_currency(current_ema50))
             m3.metric("Filtro Volumen (RVOL)", f"{rvol:.2f}x", delta="Buen Volumen" if rvol >= 1.2 else "Volumen Bajo", delta_color="normal" if rvol >= 1.2 else "off")
             
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
-            if "Pullbacks" in estrategia:
-                fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="#fbbf24", width=3.5), name="EMA 50"))
-                fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.0), opacity=0.4, name="EMA 200"))
-            else:
-                fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_50"], line=dict(color="orange", width=1.5), name="EMA 50"))
-                fig.add_trace(go.Scatter(x=df_asset.index, y=df_asset["EMA_200"], line=dict(color="blue", width=1.5), name="EMA 200"))
-
-            if "Primera Vela" in estrategia and orb_high and orb_low:
-                fig.add_hline(y=orb_high, line_dash="dash", line_color="#10b981", annotation_text="Techo ORB")
-                fig.add_hline(y=orb_low, line_dash="dash", line_color="#ef4444", annotation_text="Piso ORB")
-
-            fig.update_layout(template="plotly_dark", height=650, margin=dict(l=20, r=20, t=40, b=20), dragmode='zoom', xaxis=dict(rangeslider=dict(visible=False)), newshape=USER_DRAWING_STYLE)
+            # Renderizando gráfico mediante nuestro motor modular `dashboard/charts.py`
+            orb_tupla = (orb_high, orb_low) if "Primera Vela" in estrategia else None
+            fig = create_institutional_chart(df_asset, asset_choice, selected_timeframe, show_emas=True, orb_levels=orb_tupla)
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
             st.markdown("### 🤖 Auditoría de Algoritmo (Confirmación):")
@@ -243,7 +232,6 @@ if modo_app == "📊 Terminal Principal":
 
     if not df_trades.empty and 'Tipo_Movimiento' in df_trades.columns:
         df_trades['Ganancia_Realizada_USD'] = pd.to_numeric(df_trades.get('Ganancia_Realizada_USD', pd.Series(dtype=float)), errors='coerce').fillna(0)
-        cierres = df_trades[df_trades['Tipo_Movimiento'].str.contains("Cierre", na=False)]
         st.markdown("### 📊 Rendimiento Realizado")
         st.dataframe(df_trades, use_container_width=True)
 
@@ -252,7 +240,7 @@ if modo_app == "📊 Terminal Principal":
 # =====================================================================
 elif modo_app == "🎮 Simulador Completo":
     st.title("🎮 Simulador de Mercado Abierto")
-    st.markdown(f"### 💰 Saldo de Práctica: **${st.session_state.get('sim_balance', 10000.0):,.2f} USD**")
+    st.markdown(f"### 💰 Saldo de Práctica: **{format_currency(st.session_state.get('sim_balance', 10000.0))}**")
     st.markdown("---")
 
     if st.session_state.get('sim_estado', 'INACTIVO') == 'INACTIVO':
@@ -263,7 +251,7 @@ elif modo_app == "🎮 Simulador Completo":
         with col_s4: st_sl_pct = st.number_input("Riesgo (SL %):", min_value=0.1, value=5.0, step=0.5)
 
         m_data_init, _ = load_data("1 Hora")
-        st.info(f"💡 Precio actual: **${m_data_init.get(s_asset, {}).get('price', PRECIO_DEFECTO.get(s_asset, 100.0)):,.2f}**")
+        st.info(f"💡 Precio actual: **{format_currency(m_data_init.get(s_asset, {}).get('price', PRECIO_DEFECTO.get(s_asset, 100.0)))}**")
 
         if st.button("🚀 Abrir Posición en Simulador"):
             st.session_state.sim_estado, st.session_state.sim_activo, st.session_state.sim_dir = 'ABIERTO', s_asset, s_dir
@@ -284,15 +272,13 @@ elif modo_app == "🎮 Simulador Completo":
             
             d1, d2, d3, d4 = st.columns(4)
             d1.metric("Activo", asset, direccion)
-            d2.metric("Precio Entrada", f"${p_entrada:,.2f}")
-            d3.metric("Precio Actual", f"${p_actual:,.2f}")
-            d4.metric("PnL NETO", f"${pnl_neto_usd:,.2f}", f"{(pnl_neto_usd/monto)*100:.2f}%")
+            d2.metric("Precio Entrada", format_currency(p_entrada))
+            d3.metric("Precio Actual", format_currency(p_actual))
+            d4.metric("PnL NETO", format_currency(pnl_neto_usd), f"{(pnl_neto_usd/monto)*100:.2f}%")
 
             if asset in m_history:
                 df_sim = m_history[asset].tail(80)
-                fig_sim = go.Figure(data=[go.Candlestick(x=df_sim.index, open=df_sim["Open"], high=df_sim["High"], low=df_sim["Low"], close=df_sim["Close"], name="Precio")])
-                fig_sim.add_hline(y=p_entrada, line_dash="dot", line_color="white", annotation_text="Tu Entrada")
-                fig_sim.update_layout(template="plotly_dark", height=600, dragmode='zoom', xaxis=dict(rangeslider=dict(visible=False)), newshape=USER_DRAWING_STYLE)
+                fig_sim = create_institutional_chart(df_sim, asset, "5 Minutos", show_emas=True)
                 st.plotly_chart(fig_sim, use_container_width=True, config=PLOTLY_CONFIG)
 
             if st.button("🛑 CERRAR POSICIÓN"):
