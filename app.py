@@ -18,7 +18,7 @@ from core.market_engine import load_data, get_orb_levels, load_mtf_data
 from core.risk_engine import calculate_position_size
 from core.backtest_engine import run_backtest_ema_crossover
 from core.ai_engine import calculate_ai_score
-from core.portfolio_math import run_monte_carlo_simulation, calculate_kelly_criterion # <--- NUEVO MOTOR CUANTITATIVO
+from core.portfolio_math import run_monte_carlo_simulation, calculate_kelly_criterion
 
 # Indicadores especializados
 from indicators.math_indicators import calculate_rsi, calculate_atr
@@ -69,7 +69,7 @@ market_data_init, market_history_init = load_data("1 Hora")
 # ==========================================
 st.sidebar.image("https://img.icons8.com/color/96/000000/bullish.png", width=60)
 st.sidebar.title("Menú Oculoos")
-modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest", "🔮 Simulador Monte Carlo (NUEVO)"])
+modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest", "🔮 Simulador Monte Carlo"])
 st.sidebar.markdown("---")
 st.sidebar.caption("Oculoos Trading v6.4 | Institucional")
 
@@ -305,9 +305,9 @@ elif modo_app == "🧪 Laboratorio Backtest":
             st.error("No hay suficientes datos históricos para correr la prueba.")
 
 # =====================================================================
-# MODO 4: SIMULADOR DE MONTE CARLO Y KELLY (NUEVO)
+# MODO 4: SIMULADOR DE MONTE CARLO Y KELLY
 # =====================================================================
-elif modo_app == "🔮 Simulador Monte Carlo (NUEVO)":
+elif modo_app == "🔮 Simulador Monte Carlo":
     st.title("🔮 Motor Cuantitativo: Monte Carlo & Criterio de Kelly")
     st.caption("Proyección probabilística de precios y optimización matemática del riesgo de capital.")
     st.markdown("---")
@@ -327,13 +327,10 @@ elif modo_app == "🔮 Simulador Monte Carlo (NUEVO)":
         if paths is not None:
             st.success(f"¡Simulación completada con éxito para {mc_asset}!")
             
-            # Gráfico de trayectorias de Monte Carlo
             fig_mc = go.Figure()
-            # Mostramos una muestra de las simulaciones para no saturar el render
             for i in range(min(50, mc_paths)):
                 fig_mc.add_trace(go.Scatter(y=paths[:, i], mode='lines', line=dict(width=1), opacity=0.15, showlegend=False))
             
-            # Línea promedio de proyección
             mean_path = np.mean(paths, axis=1)
             fig_mc.add_trace(go.Scatter(y=mean_path, mode='lines', line=dict(color='#00ffff', width=3), name='Trayectoria Promedio'))
             
@@ -346,8 +343,7 @@ elif modo_app == "🔮 Simulador Monte Carlo (NUEVO)":
             )
             st.plotly_chart(fig_mc, use_container_width=True, config=PLOTLY_CONFIG)
 
-            # Estadísticas de cierre de simulación
-4            final_prices = paths[-1, :]
+            final_prices = paths[-1, :]
             p_median = np.median(final_prices)
             p_max = np.max(final_prices)
             p_min = np.min(final_prices)
@@ -368,4 +364,4 @@ elif modo_app == "🔮 Simulador Monte Carlo (NUEVO)":
     with k_col2: k_ratio = st.number_input("Ratio Ganancia / Pérdida (Reward/Risk):", min_value=0.1, value=1.5, step=0.1)
 
     optimal_risk_pct = calculate_kelly_criterion(k_winrate, k_ratio)
-    st.info(f"💡 **Porcentaje Óptimo de Capital a Arriesgar (Half-Kelly):** `1.5%` o tu límite calculado de **`{optimal_risk_pct}%`** por operación.")
+    st.info(f"💡 **Porcentaje Óptimo de Capital a Arriesgar (Half-Kelly):** **`{optimal_risk_pct}%`** por operación.")
