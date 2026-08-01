@@ -10,17 +10,18 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ==========================================
-# IMPORTACIONES MODULARES (NUESTRA NUEVA ARQUITECTURA)
+# IMPORTACIONES MODULARES
 # ==========================================
 from utils.config import ACTIVOS_DISPONIBLES, PRECIO_DEFECTO, FEE_BINANCE, PLOTLY_CONFIG, USER_DRAWING_STYLE
 from utils.logger import log
 from core.market_engine import load_data, get_orb_levels, load_mtf_data
 from core.risk_engine import calculate_position_size
 from indicators.math_indicators import calculate_rsi, calculate_atr
+from core.backtest_engine import run_backtest_ema_crossover # <--- NUEVO MOTOR IMPORTADO
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v6.0", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v6.1", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # INYECCIÓN DE CSS
@@ -35,7 +36,7 @@ h3 { font-size: 1.8rem !important; }
 """, unsafe_allow_html=True)
 
 # ==========================================
-# INICIALIZACIÓN DE ESTADOS (BLINDAJE DE MEMORIA)
+# INICIALIZACIÓN DE ESTADOS
 # ==========================================
 if 'audit_cap' not in st.session_state: st.session_state.audit_cap = 1000.0
 if 'audit_rsk' not in st.session_state: st.session_state.audit_rsk = 1.0
@@ -61,19 +62,18 @@ market_data_init, market_history_init = load_data("1 Hora")
 # ==========================================
 st.sidebar.image("https://img.icons8.com/color/96/000000/bullish.png", width=60)
 st.sidebar.title("Menú Oculoos")
-modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo"])
+modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest (NUEVO)"])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v6.0 | Institucional")
+st.sidebar.caption("Oculoos Trading v6.1 | Institucional")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal":
-    st.title("👁️ Oculoos Trading v6.0 | Terminal Real")
-    st.caption("Arquitectura Modular Activa. Motores de Riesgo y Mercado operando en segundo plano.")
+    st.title("👁️ Oculoos Trading v6.1 | Terminal Real")
+    st.caption("Arquitectura Modular Activa. Motores operando en segundo plano.")
     st.markdown("---")
 
-    # PASO 1: RIESGO
     st.subheader("🛡️ PASO 1: Auditoría de Capital y Riesgo")
     ac_col1, ac_col2, ac_col3 = st.columns(3)
     with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, step=100.0, key="audit_cap", on_change=update_monto_term)
@@ -123,7 +123,6 @@ if modo_app == "📊 Terminal Principal":
         market_data, market_history = load_data(selected_timeframe)
         st.markdown("---")
 
-        # PASO 2: MACRO
         st.subheader("🌐 PASO 2: Clima Macroeconómico")
         c1, c2, c3, c4 = st.columns(4)
         def render_mc(col, title, info, is_currency=True):
@@ -135,7 +134,6 @@ if modo_app == "📊 Terminal Principal":
         render_mc(c3, "DXY", market_data.get("DXY (Dólar)", {}), False)
         render_mc(c4, "Bono 10Y", market_data.get("Bonos 10Y", {}), False)
 
-        # MÓDULO ORB
         orb_high, orb_low, c_close_actual = None, None, market_data.get(asset_choice, {}).get('price', 0.0)
         if "Primera Vela" in estrategia:
             orb_high, orb_low, origen_orb = get_orb_levels(asset_choice)
@@ -145,7 +143,6 @@ if modo_app == "📊 Terminal Principal":
                 elif c_close_actual > 0 and c_close_actual < orb_low: estado_orb, color_orb = "🔴 RUPTURA BAJISTA (Busca Pullback)", "#ef4444"
                 st.markdown(f"""<div style="background-color: #111827; padding: 15px; border-radius: 8px; border: 1px solid {color_orb}; margin-top: 10px;"><h4 style="color: {color_orb}; font-size: 1.5rem; margin-top:0;">{estado_orb}</h4><p style="color: #d1d5db; font-size: 1.2rem;">Precio: <b>${c_close_actual:,.2f}</b></p><ul style="color: #9ca3af; font-size: 1.1rem;"><li><b>Techo:</b> ${orb_high:,.2f}</li><li><b>Piso:</b> ${orb_low:,.2f}</li></ul></div>""", unsafe_allow_html=True)
 
-        # PASO 4: GRÁFICO
         st.markdown("---")
         st.subheader(f"📈 Gráfico Cuantitativo [{selected_timeframe}]")
         
@@ -182,7 +179,6 @@ if modo_app == "📊 Terminal Principal":
             fig.update_layout(template="plotly_dark", height=650, margin=dict(l=20, r=20, t=40, b=20), dragmode='zoom', xaxis=dict(rangeslider=dict(visible=False)), newshape=USER_DRAWING_STYLE)
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
-            # AUDITORÍA
             st.markdown("### 🤖 Auditoría de Algoritmo (Confirmación):")
             volumen_valido = rvol >= 1.1
             if "Clásica" in estrategia:
@@ -200,7 +196,6 @@ if modo_app == "📊 Terminal Principal":
     render_live_market_main()
     st.markdown("---")
 
-    # ================= PASO 5: BITÁCORA =================
     st.subheader("💼 PASO 5: Bitácora de Nube")
     @st.cache_resource(ttl=60)
     def get_sheet_data():
@@ -235,7 +230,6 @@ if modo_app == "📊 Terminal Principal":
         cierres = df_trades[df_trades['Tipo_Movimiento'].str.contains("Cierre", na=False)]
         st.markdown("### 📊 Rendimiento Realizado")
         st.dataframe(df_trades, use_container_width=True)
-
 
 # =====================================================================
 # MODO 2: SIMULADOR DE PRÁCTICA
@@ -290,3 +284,37 @@ elif modo_app == "🎮 Simulador Completo":
                 st.session_state.sim_estado = 'INACTIVO'
                 st.rerun()
         motor_simulador_vivo()
+
+# =====================================================================
+# MODO 3: LABORATORIO DE BACKTESTING (NUEVO)
+# =====================================================================
+elif modo_app == "🧪 Laboratorio Backtest (NUEVO)":
+    st.title("🧪 Laboratorio Cuantitativo (Backtesting)")
+    st.caption("Prueba estrategias en el pasado para saber si funcionan matemáticamente.")
+    st.markdown("---")
+    
+    st.info("Estrategia Activa: **Cruce de Medias Móviles (EMA 50 vs EMA 200)**")
+    
+    col_bt1, col_bt2 = st.columns(2)
+    with col_bt1: bt_asset = st.selectbox("Activo a evaluar:", ACTIVOS_DISPONIBLES)
+    with col_bt2: bt_timeframe = st.selectbox("Datos Históricos:", ["1 Hora (1h)", "1 Día (1D)", "1 Semana (1W)"], index=1)
+    
+    if st.button("⚙️ Correr Simulación Matemática"):
+        _, history_data = load_data(bt_timeframe)
+        if bt_asset in history_data and not history_data[bt_asset].empty:
+            df_bt = history_data[bt_asset]
+            resultados = run_backtest_ema_crossover(df_bt)
+            
+            st.markdown("### 📊 Resultados de la Simulación:")
+            res1, res2, res3 = st.columns(3)
+            res1.metric("Total de Operaciones", resultados['total_trades'])
+            
+            win_color = "normal" if resultados['win_rate'] >= 50 else "off"
+            res2.metric("Win Rate (Tasa de Éxito)", f"{resultados['win_rate']}%", delta="Rentable" if resultados['win_rate'] >= 50 else "Pérdida", delta_color=win_color)
+            
+            pnl_color = "normal" if resultados['pnl_pct'] > 0 else "off"
+            res3.metric("Retorno de Inversión (PnL)", f"{resultados['pnl_pct']}%", delta="Positivo" if resultados['pnl_pct'] > 0 else "Negativo", delta_color=pnl_color)
+            
+            st.caption("Nota: El backtest asume condiciones ideales sin deslizamiento (slippage) ni comisiones de exchange en esta versión rápida.")
+        else:
+            st.error("No hay suficientes datos históricos para correr la prueba.")
