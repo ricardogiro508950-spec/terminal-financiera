@@ -9,7 +9,6 @@ def detect_candlestick_patterns(df):
     if df is None or len(df) < 5:
         return "Datos insuficientes para análisis de patrones"
 
-    # Tomamos las últimas 2 o 3 velas para análisis
     c_last = df.iloc[-1]
     c_prev = df.iloc[-2]
     
@@ -32,15 +31,14 @@ def detect_candlestick_patterns(df):
         patrones_detectados.append("🔴 Estrella Fugaz (Rechazo bajista en zona alta)")
 
     # 3. Detección de Envolvente (Engulfing)
-    prev_body = abs(c_prev["Close"] - c_prev["Open"])
-    if c_prev["Close"] < c_prev["Open"] and c_last["Close"] > c_last["Open"]: # Anterior roja, actual verde
+    if c_prev["Close"] < c_prev["Open"] and c_last["Close"] > c_last["Open"]:
         if c_last["Close"] >= c_prev["Open"] and c_last["Open"] <= c_prev["Close"]:
             patrones_detectados.append("🟢 Envolvente Alcista Institucional")
-    elif c_prev["Close"] > c_prev["Open"] and c_last["Close"] < c_last["Open"]: # Anterior verde, actual roja
+    elif c_prev["Close"] > c_prev["Open"] and c_last["Close"] < c_last["Open"]:
         if c_last["Close"] <= c_prev["Open"] and c_last["Open"] >= c_prev["Close"]:
             patrones_detectados.append("🔴 Envolvente Bajista Institucional")
 
     if not patrones_detectados:
-        return "⚪ Sin patrones de giro críticos en la última vela (Mercado en desarrollo estructural)."
+        return "⚪ Sin patrones de giro críticos en la última vela."
     
- | join(" | ")
+    return " | ".join(patrones_detectados)
