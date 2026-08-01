@@ -11,17 +11,80 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v5.47", page_icon="👁️", layout="wide"
+    page_title="Oculoos Trading v5.49", page_icon="👁️", layout="wide"
 )
 
-st.title("👁️ Oculoos Trading v5.47 (Edición Cuantitativa Profesional)")
-st.caption("Filtro de Volumen, ATR Dinámico, Comisiones Reales y ORB Inteligente")
+# ==========================================
+# INYECCIÓN DE CSS PARA AUMENTAR TAMAÑOS
+# ==========================================
+st.markdown("""
+<style>
+/* Aumentar tamaño de métricas (números principales) */
+[data-testid="stMetricValue"] {
+    font-size: 2.5rem !important;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 1.2rem !important;
+}
+/* Aumentar texto general y listas */
+p, li, span {
+    font-size: 1.15rem !important;
+}
+/* Aumentar Subtítulos */
+h2 {
+    font-size: 2.2rem !important;
+}
+h3 {
+    font-size: 1.8rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("👁️ Oculoos Trading v5.49 (Visual Pro)")
+st.caption("Filtro de Volumen, ATR Dinámico, Gráficos Interactivos y Blindaje de Memoria")
 st.markdown("---")
 
 ACTIVOS_DISPONIBLES = ["Bitcoin", "Oro", "Petróleo"]
 TICKER_MAP = {"Bitcoin": "BTC-USD", "Oro": "GC=F", "Petróleo": "CL=F"}
 PRECIO_DEFECTO = {"Bitcoin": 60000.0, "Oro": 2000.0, "Petróleo": 75.0}
 FEE_BINANCE = 0.001 # 0.1% comisión estándar de Binance
+
+# CONFIGURACIÓN INTERACTIVA DE GRÁFICOS (PC Y MÓVIL)
+PLOTLY_CONFIG = {
+    'scrollZoom': True,
+    'displayModeBar': True,
+    'displaylogo': False,
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d']
+}
+
+# ==========================================
+# INICIALIZACIÓN DE VARIABLES (BLINDAJE DE ERRORES)
+# ==========================================
+if 'audit_cap' not in st.session_state: st.session_state.audit_cap = 1000.0
+if 'audit_rsk' not in st.session_state: st.session_state.audit_rsk = 1.0
+if 'audit_sl' not in st.session_state: st.session_state.audit_sl = 5.0
+if 'monto_inv_term' not in st.session_state: st.session_state.monto_inv_term = 200.0
+
+if 'sim_estado' not in st.session_state: st.session_state.sim_estado = 'INACTIVO'
+if 'sim_balance' not in st.session_state: st.session_state.sim_balance = 10000.0 
+if 'sim_pnl_historico' not in st.session_state: st.session_state.sim_pnl_historico = 0.0
+if 'sim_rsk_pct' not in st.session_state: st.session_state.sim_rsk_pct = 1.0
+if 'sim_sl_pct' not in st.session_state: st.session_state.sim_sl_pct = 5.0
+if 'monto_inv_sim' not in st.session_state: st.session_state.monto_inv_sim = 2000.0 
+if 'sim_fees_pagados' not in st.session_state: st.session_state.sim_fees_pagados = 0.0
+
+# Funciones de reacción seguras
+def update_monto_term():
+    cap = st.session_state.get('audit_cap', 1000.0)
+    rsk = st.session_state.get('audit_rsk', 1.0)
+    sl = st.session_state.get('audit_sl', 5.0)
+    if sl > 0: st.session_state.monto_inv_term = (cap * (rsk / 100)) / (sl / 100)
+
+def update_monto_sim():
+    bal = st.session_state.get('sim_balance', 10000.0)
+    rsk = st.session_state.get('sim_rsk_pct', 1.0)
+    sl = st.session_state.get('sim_sl_pct', 5.0)
+    if sl > 0: st.session_state.monto_inv_sim = (bal * (rsk / 100)) / (sl / 100)
 
 # ==========================================
 # FUNCIONES MATEMÁTICAS AVANZADAS
@@ -35,7 +98,7 @@ def calculate_rsi(series, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-# NUEVA FUNCIÓN: Calculadora de Volatilidad (ATR)
+# Calculadora de Volatilidad (ATR)
 def calculate_atr(high, low, close, period=14):
     tr1 = high - low
     tr2 = (high - close.shift()).abs()
@@ -89,7 +152,7 @@ def load_mtf_data(asset_name):
     except Exception:
         return None
 
-# MOTOR MEJORADO DE LA PRIMERA VELA (Inteligencia por Activo)
+# MOTOR MEJORADO DE LA PRIMERA VELA
 @st.cache_data(ttl=60)
 def get_orb_levels(asset_name):
     try:
@@ -98,13 +161,11 @@ def get_orb_levels(asset_name):
         if df.empty: return None, None, None
 
         if asset_name in ["Oro", "Petróleo"]:
-            # Activos Tradicionales: Apertura de Wall Street (9:30 AM NY)
             if df.index.tz is None: df.index = df.index.tz_localize('UTC')
             df.index = df.index.tz_convert('America/New_York')
             df_open = df[(df.index.hour == 9) & (df.index.minute == 30)]
             origen = "Apertura NY (9:30 AM EST)"
         else:
-            # Cripto (Bitcoin): Apertura Diaria Global (00:00 UTC)
             if df.index.tz is not None: df.index = df.index.tz_convert('UTC')
             else: df.index = df.index.tz_localize('UTC')
             df_open = df[(df.index.hour == 0) & (df.index.minute == 0)]
@@ -117,7 +178,6 @@ def get_orb_levels(asset_name):
     except Exception:
         return None, None, None
 
-# Carga inicial de precios en vivo
 market_data_init, market_history_init = load_data("1 Hora")
 
 # ==========================================
@@ -126,29 +186,28 @@ market_data_init, market_history_init = load_data("1 Hora")
 st.subheader("🛡️ PASO 1: Auditoría de Capital y Riesgo Dinámico")
 st.caption("Define tu pérdida máxima. El sistema calculará tu límite seguro de compra.")
 ac_col1, ac_col2, ac_col3 = st.columns(3)
-with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, value=1000.0, step=100.0, key="audit_capital")
-with ac_col2: riesgo_pct = st.slider("Riesgo Máximo por Operación (%)", 0.5, 5.0, 1.0, 0.5, key="audit_risk")
+with ac_col1: capital = st.number_input("Capital Total (USD)", min_value=10.0, value=1000.0, step=100.0, key="audit_capital", on_change=update_monto_term)
+with ac_col2: riesgo_pct = st.slider("Riesgo Máximo por Operación (%)", 0.5, 5.0, 1.0, 0.5, key="audit_risk", on_change=update_monto_term)
 with ac_col3:
     activo_riesgo = st.selectbox("Activo a operar:", ACTIVOS_DISPONIBLES, key="risk_asset")
     
-    # INTELIGENCIA 1: Sugerencia de Stop Loss basada en ATR (Volatilidad Real)
     sugerencia_sl_pct = 5.0
     if activo_riesgo in market_history_init:
         df_atr = market_history_init[activo_riesgo]
         if not df_atr.empty and len(df_atr) > 14:
             atr = calculate_atr(df_atr['High'], df_atr['Low'], df_atr['Close']).iloc[-1]
             precio_actual = df_atr['Close'].iloc[-1]
-            sugerencia_sl_pct = (atr / precio_actual) * 100 * 1.5 # 1.5x ATR para respirar
+            sugerencia_sl_pct = (atr / precio_actual) * 100 * 1.5 
             
-    st.info(f"💡 **Sugerencia de Stop Loss (Volatilidad ATR):** `{sugerencia_sl_pct:.2f}%`")
-    stop_loss_pct = st.number_input("Tu Stop-Loss Distancia (%)", min_value=0.1, value=float(f"{sugerencia_sl_pct:.2f}"), step=0.1, key="audit_sl_pct")
+    st.info(f"💡 **Sugerencia de Stop Loss (ATR):** `{sugerencia_sl_pct:.2f}%`")
+    stop_loss_pct = st.number_input("Tu Stop-Loss Distancia (%)", min_value=0.1, value=float(f"{sugerencia_sl_pct:.2f}"), step=0.1, key="audit_sl_pct", on_change=update_monto_term)
 
 riesgo_usd = capital * (riesgo_pct / 100)
 tamano_posicion = riesgo_usd / (stop_loss_pct / 100) if stop_loss_pct > 0 else 0
 
 r_col1, r_col2 = st.columns(2)
 with r_col1: st.error(f"**Pérdida Máxima Aceptada (Riesgo):** ${riesgo_usd:.2f} USD")
-with r_col2: st.success(f"**Límite de Inversión Seguro (Tamaño de Posición):** ${tamano_posicion:.2f} USD")
+with r_col2: st.success(f"**Límite de Inversión Seguro:** ${tamano_posicion:.2f} USD")
 st.markdown("---")
 
 # ==========================================
@@ -220,9 +279,9 @@ def render_live_market():
         sign = "+" if chg >= 0 else ""
         col.markdown(f"""
         <div style="background-color: #111827; padding: 10px; border-radius: 6px; border: 1px solid #1f2937; text-align: center;">
-            <div style="font-size: 11px; color: #9ca3af;">{title}</div>
-            <div style="font-size: 20px; font-weight: bold; color: #f3f4f6;">{p_str}</div>
-            <div style="font-size: 11px; color: {color}; font-weight: 600;">{sign}{chg:.2f}%</div>
+            <div style="font-size: 14px; color: #9ca3af;">{title}</div>
+            <div style="font-size: 28px; font-weight: bold; color: #f3f4f6;">{p_str}</div>
+            <div style="font-size: 14px; color: {color}; font-weight: 600;">{sign}{chg:.2f}%</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -253,9 +312,9 @@ def render_live_market():
 
             st.markdown(f"""
             <div style="background-color: #111827; padding: 15px; border-radius: 8px; border: 1px solid {color_orb}; margin-top: 10px;">
-                <h4 style="color: {color_orb}; margin-top:0;">{estado_orb}</h4>
-                <p style="color: #d1d5db; margin-bottom: 5px;">Precio Actual: <b>${c_close_actual:,.2f}</b></p>
-                <ul style="color: #9ca3af; font-size: 14px; margin-bottom: 0;">
+                <h4 style="color: {color_orb}; font-size: 1.5rem; margin-top:0;">{estado_orb}</h4>
+                <p style="color: #d1d5db; font-size: 1.2rem; margin-bottom: 5px;">Precio Actual: <b>${c_close_actual:,.2f}</b></p>
+                <ul style="color: #9ca3af; font-size: 1.1rem; margin-bottom: 0;">
                     <li><b>Techo del Rango:</b> ${orb_high:,.2f}</li>
                     <li><b>Piso del Rango:</b> ${orb_low:,.2f}</li>
                 </ul>
@@ -266,7 +325,7 @@ def render_live_market():
 
     # ================= PASO 3 Y 4: GRÁFICO Y ALGORITMO =================
     st.markdown("---")
-    st.subheader(f"📈 Gráfico Cuantitativo y Filtro de Volumen [{selected_timeframe}]")
+    st.subheader(f"📈 Gráfico Cuantitativo Expandido [{selected_timeframe}]")
 
     if asset_choice in market_history:
         df_asset = market_history[asset_choice].copy()
@@ -274,7 +333,6 @@ def render_live_market():
         df_asset["EMA_200"] = df_asset["Close"].ewm(span=200, adjust=False).mean() if len(df_asset) >= 200 else df_asset["Close"].ewm(span=len(df_asset), adjust=False).mean()
         df_asset["RSI"] = calculate_rsi(df_asset["Close"])
         
-        # INTELIGENCIA 2: Filtro de Volumen Relativo (RVOL)
         df_asset["Vol_SMA_20"] = df_asset["Volume"].rolling(20).mean()
 
         current_close = df_asset["Close"].iloc[-1]
@@ -288,10 +346,10 @@ def render_live_market():
         
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("RSI (Momento)", f"{current_rsi:.2f}")
-        m2.metric("EMA 50 (Soporte Rápido)", f"${current_ema50:,.2f}")
+        m2.metric("EMA 50 (Soporte)", f"${current_ema50:,.2f}")
         
         rvol_color = "normal" if rvol >= 1.2 else "off"
-        m3.metric("Filtro de Volumen (RVOL)", f"{rvol:.2f}x", delta="Buen Volumen" if rvol >= 1.2 else "Volumen Bajo", delta_color=rvol_color)
+        m3.metric("Filtro Volumen (RVOL)", f"{rvol:.2f}x", delta="Buen Volumen" if rvol >= 1.2 else "Volumen Bajo", delta_color=rvol_color)
         
         fig = go.Figure()
         fig.add_trace(go.Candlestick(x=df_asset.index, open=df_asset["Open"], high=df_asset["High"], low=df_asset["Low"], close=df_asset["Close"], name="Precio"))
@@ -307,12 +365,18 @@ def render_live_market():
             fig.add_hline(y=orb_high, line_dash="dash", line_color="#10b981", annotation_text="Techo ORB")
             fig.add_hline(y=orb_low, line_dash="dash", line_color="#ef4444", annotation_text="Piso ORB")
 
-        fig.update_layout(template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig, use_container_width=True)
+        # ALTURA AUMENTADA Y ZOOM CONFIGURADO
+        fig.update_layout(
+            template="plotly_dark", 
+            height=650, 
+            margin=dict(l=20, r=20, t=40, b=20),
+            dragmode='zoom',
+            xaxis=dict(rangeslider=dict(visible=False))
+        )
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
         st.markdown("### 🤖 Auditoría de Algoritmo (Confirmación de Entrada):")
         
-        # Validar el Volumen antes de dar luz verde
         volumen_valido = rvol >= 1.1
 
         if "Clásica" in estrategia:
@@ -353,7 +417,7 @@ render_live_market()
 st.markdown("---")
 
 # =====================================================================
-# SIMULADOR COMPLETO (CON COMISIONES REALES)
+# SIMULADOR COMPLETO (CON COMISIONES REALES Y USO SEGURO DE ESTADO)
 # =====================================================================
 st.subheader("🎮 Simulador de Mercado Abierto")
 st.caption("Integrado con comisiones Maker/Taker de Binance (0.1%) para un PnL 100% realista.")
@@ -380,25 +444,26 @@ if st.button("🚀 Abrir Posición en Simulador"):
     st.success(f"Posición abierta. Comisión de Binance pagada al entrar: ${fee_entrada:.2f} USD.")
     st.rerun()
 
-if st.session_state.sim_estado == 'ABIERTO':
+# USO DE .GET() PARA EVITAR ATTRIBUTEERROR
+if st.session_state.get('sim_estado', 'INACTIVO') == 'ABIERTO':
     @st.fragment(run_every=2)
     def motor_simulador_vivo():
-        if st.session_state.sim_estado != 'ABIERTO': st.rerun()
+        if st.session_state.get('sim_estado', 'INACTIVO') != 'ABIERTO': st.rerun()
         
-        asset = st.session_state.sim_activo
-        m_data, _ = load_data("1 Hora")
+        asset = st.session_state.get('sim_activo', 'Bitcoin')
+        m_data, m_history = load_data("1 Hora")
         p_actual = m_data.get(asset, {}).get('price', 60000.0)
-        p_entrada = st.session_state.sim_precio_entrada
-        monto = st.session_state.sim_monto_inicial
-        direccion = st.session_state.sim_dir
+        p_entrada = st.session_state.get('sim_precio_entrada', 60000.0)
+        monto = st.session_state.get('sim_monto_inicial', 500.0)
+        direccion = st.session_state.get('sim_dir', 'Compra (Long)')
+        fees_pagados = st.session_state.get('sim_fees_pagados', 0.0)
         
-        # INTELIGENCIA 3: Cálculo PnL con comisiones
         if "Compra" in direccion: pnl_bruto_pct = ((p_actual - p_entrada) / p_entrada) * 100
         else: pnl_bruto_pct = ((p_entrada - p_actual) / p_entrada) * 100
         
         pnl_bruto_usd = monto * (pnl_bruto_pct / 100)
         fee_salida = monto * FEE_BINANCE
-        pnl_neto_usd = pnl_bruto_usd - st.session_state.sim_fees_pagados - fee_salida
+        pnl_neto_usd = pnl_bruto_usd - fees_pagados - fee_salida
         
         d1, d2, d3, d4 = st.columns(4)
         d1.metric("Activo", asset, direccion)
@@ -406,7 +471,21 @@ if st.session_state.sim_estado == 'ABIERTO':
         d3.metric("Precio Actual", f"${p_actual:,.2f}")
         d4.metric("PnL NETO (Rebajando Fees)", f"${pnl_neto_usd:,.2f}", f"{(pnl_neto_usd/monto)*100:.2f}%")
         
-        st.caption(f"Para quedar en Break-Even (ganancia cero), debes cubrir las comisiones de entrada y salida (Total fees: ${(st.session_state.sim_fees_pagados + fee_salida):.2f}).")
+        st.caption(f"Para quedar en Break-Even (ganancia cero), debes cubrir las comisiones de entrada y salida (Total fees: ${(fees_pagados + fee_salida):.2f}).")
+
+        # Gráfico del simulador aumentado y con zoom
+        if asset in m_history:
+            df_sim = m_history[asset].tail(80)
+            fig_sim = go.Figure(data=[go.Candlestick(x=df_sim.index, open=df_sim["Open"], high=df_sim["High"], low=df_sim["Low"], close=df_sim["Close"], name="Precio")])
+            fig_sim.add_hline(y=p_entrada, line_dash="dot", line_color="white", annotation_text="Tu Entrada")
+            fig_sim.update_layout(
+                template="plotly_dark", 
+                height=600, 
+                margin=dict(l=20, r=20, t=10, b=10),
+                dragmode='zoom',
+                xaxis=dict(rangeslider=dict(visible=False))
+            )
+            st.plotly_chart(fig_sim, use_container_width=True, config=PLOTLY_CONFIG)
 
         if st.button("🛑 CERRAR POSICIÓN"):
             st.session_state.sim_balance += pnl_neto_usd
@@ -450,7 +529,7 @@ with st.form("registro_operacion", clear_on_submit=True):
         fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         es_cierre = "Cierre" in reg_tipo_mov
         pnl_bruto = (reg_precio - reg_precio_ref) * reg_cantidad if es_cierre else 0
-        fees = (reg_precio * reg_cantidad * FEE_BINANCE) * (2 if es_cierre else 1) # Simplificado
+        fees = (reg_precio * reg_cantidad * FEE_BINANCE) * (2 if es_cierre else 1)
         pnl_neto = pnl_bruto - fees if es_cierre else 0
 
         worksheet.append_row([fecha, reg_activo, reg_tipo_mov, float(reg_cantidad), float(reg_precio), float(reg_precio_ref) if es_cierre else "", float(pnl_neto) if es_cierre else ""])
