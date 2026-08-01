@@ -19,6 +19,7 @@ from core.risk_engine import calculate_position_size
 from core.backtest_engine import run_backtest_ema_crossover
 from core.ai_engine import calculate_ai_score
 from core.portfolio_math import run_monte_carlo_simulation, calculate_kelly_criterion
+from core.alert_engine import send_telegram_alert # <--- NUEVO MOTOR DE ALERTAS
 
 # Indicadores especializados
 from indicators.math_indicators import calculate_rsi, calculate_atr
@@ -31,7 +32,7 @@ from dashboard.charts import create_institutional_chart
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Oculoos Trading v6.4", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
+    page_title="Oculoos Trading v6.5", page_icon="👁️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # INYECCIÓN DE CSS
@@ -69,16 +70,16 @@ market_data_init, market_history_init = load_data("1 Hora")
 # ==========================================
 st.sidebar.image("https://img.icons8.com/color/96/000000/bullish.png", width=60)
 st.sidebar.title("Menú Oculoos")
-modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest", "🔮 Simulador Monte Carlo"])
+modo_app = st.sidebar.radio("Área de trabajo:", ["📊 Terminal Principal", "🎮 Simulador Completo", "🧪 Laboratorio Backtest", "🔮 Simulador Monte Carlo", "📡 Centro de Alertas (NUEVO)"])
 st.sidebar.markdown("---")
-st.sidebar.caption("Oculoos Trading v6.4 | Institucional")
+st.sidebar.caption("Oculoos Trading v6.5 | Institucional")
 
 # =====================================================================
 # MODO 1: TERMINAL PRINCIPAL
 # =====================================================================
 if modo_app == "📊 Terminal Principal":
-    st.title("👁️ Oculoos Trading v6.4 | Terminal Institucional")
-    st.caption("Arquitectura modular con motores avanzados sincronizados.")
+    st.title("👁️ Oculoos Trading v6.5 | Terminal Institucional")
+    st.caption("Arquitectura modular completa con IA, Riesgo y Alertas en tiempo real.")
     st.markdown("---")
 
     st.subheader("🛡️ PASO 1: Auditoría de Capital y Riesgo")
@@ -365,3 +366,32 @@ elif modo_app == "🔮 Simulador Monte Carlo":
 
     optimal_risk_pct = calculate_kelly_criterion(k_winrate, k_ratio)
     st.info(f"💡 **Porcentaje Óptimo de Capital a Arriesgar (Half-Kelly):** **`{optimal_risk_pct}%`** por operación.")
+
+# =====================================================================
+# MODO 5: CENTRO DE ALERTAS TELEGRAM (NUEVO)
+# =====================================================================
+elif modo_app == "📡 Centro de Alertas (NUEVO)":
+    st.title("📡 Centro de Alertas y Automatización (Telegram)")
+    st.caption("Configura tu bot para recibir notificaciones directas al móvil sobre señales institucionales.")
+    st.markdown("---")
+
+    st.info("💡 Para usar este módulo, ingresa tu Bot Token de Telegram y el Chat ID de tu canal o chat privado.")
+
+    c_tel1, c_tel2 = st.columns(2)
+    with c_tel1: bot_token_input = st.text_input("Telegram Bot Token:", type="password", placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ")
+    with c_tel2: chat_id_input = st.text_input("Telegram Chat ID:", placeholder="-100123456789 o tu ID numérico")
+
+    st.markdown("---")
+    st.subheader("✉️ Prueba de Envío Rápido")
+    
+    test_msg = st.text_area("Mensaje de prueba:", value="🚨 *Oculoos Terminal v6.5*\n¡Sistema de alertas operando con éxito en la nube modular!")
+
+    if st.button("📤 Enviar Alerta de Prueba a Telegram"):
+        if bot_token_input and chat_id_input:
+            success, resp_text = send_telegram_alert(bot_token_input, chat_id_input, test_msg)
+            if success:
+                st.success(f"✅ {resp_text}")
+            else:
+                st.error(f"❌ {resp_text}")
+        else:
+            st.warning("⚠️ Debes rellenar el Bot Token y el Chat ID antes de enviar una prueba.")
