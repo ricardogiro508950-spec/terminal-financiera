@@ -20,7 +20,7 @@ from core.backtest_engine import run_backtest_ema_crossover
 from core.ai_engine import calculate_ai_score
 from core.portfolio_math import run_monte_carlo_simulation, calculate_kelly_criterion
 from core.alert_engine import send_telegram_alert
-from core.pattern_engine import detect_candlestick_patterns # <--- NUEVO MOTOR DE PATRONES DE VELAS
+from core.pattern_engine import detect_candlestick_patterns
 
 # Indicadores especializados
 from indicators.math_indicators import calculate_rsi, calculate_atr
@@ -77,7 +77,7 @@ modo_app = st.sidebar.radio("Área de trabajo:", [
     "🧪 Laboratorio Backtest", 
     "🔮 Simulador Monte Carlo", 
     "📡 Centro de Alertas",
-    "📚 Guía de Velas y 6 Pasos (NUEVO)"
+    "📚 Guía de Velas y 6 Pasos"
 ])
 st.sidebar.markdown("---")
 st.sidebar.caption("Oculoos Trading v7.0 | Institucional")
@@ -235,7 +235,6 @@ elif modo_app == "🎮 Simulador Completo":
     st.title("🎮 Simulador de Mercado Abierto")
     st.markdown(f"### 💰 Saldo de Práctica: **{format_currency(st.session_state.get('sim_balance', 10000.0))}**")
     st.markdown("---")
-    # ... (código del simulador intacto)
     if st.session_state.get('sim_estado', 'INACTIVO') == 'INACTIVO':
         col_s1, col_s2, col_s3, col_s4 = st.columns(4)
         with col_s1: s_asset = st.selectbox("Activo:", ACTIVOS_DISPONIBLES)
@@ -310,7 +309,7 @@ elif modo_app == "🔮 Simulador Monte Carlo":
             fig_mc = go.Figure()
             for i in range(50): fig_mc.add_trace(go.Scatter(y=paths[:, i], mode='lines', line=dict(width=1, color='rgba(0,255,255,0.1)'), showlegend=False))
             fig_mc.update_layout(template="plotly_dark", height=500)
-            st.plotly_chart(fig_mc, use_container_width=True)
+            st.plotly_chart(fig_mc, use_container_width=True, config=PLOTLY_CONFIG)
 
 # =====================================================================
 # MODO 5: CENTRO DE ALERTAS
@@ -323,9 +322,9 @@ elif modo_app == "📡 Centro de Alertas":
         send_telegram_alert(bot_token, chat_id, "🚨 Alerta de prueba Oculoos v7.0")
 
 # =====================================================================
-# MODO 6: GUÍA DE VELAS Y 6 PASOS (NUEVO)
+# MODO 6: GUÍA DE VELAS Y 6 PASOS
 # =====================================================================
-elif modo_app == "📚 Guía de Velas y 6 Pasos (NUEVO)":
+elif modo_app == "📚 Guía de Velas y 6 Pasos":
     st.title("📚 Manual Institucional de Acción del Precio")
     st.caption("Guía interactiva basada en confluencia, estructura y velas de giro.")
     st.markdown("---")
