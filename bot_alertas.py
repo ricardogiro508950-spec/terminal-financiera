@@ -24,8 +24,15 @@ ACTIVOS = {"Bitcoin": "BTC-USD", "Oro": "GC=F", "Petróleo": "CL=F"}
 ESTRATEGIAS = ["Confluencia Clásica", "Primera Vela (ORB)", "Cazador de Pullbacks"]
 
 INTERVALO_CICLO_SEG = 900       # revisa cada 15 minutos (no cada 45 seg — evita saturar la API)
-HORAS_PARA_EVALUAR = 4          # cuántas horas después revisa si la señal "acertó"
 UMBRAL_PULLBACK_PCT = 0.35
+
+# Cada estrategia opera en una temporalidad distinta, así que cada una necesita
+# su propio tiempo de espera antes de evaluar si la señal acertó:
+HORAS_EVALUACION_POR_ESTRATEGIA = {
+    "Primera Vela (ORB)": 2,          # usa velas de 15 min -> se resuelve rápido
+    "Cazador de Pullbacks": 6,        # usa velas de 1 hora -> tiempo intermedio
+    "Confluencia Clásica": 72,        # usa velas de 1 día -> necesita varios días
+}
 
 # ==========================================
 # SERVIDOR WEB (para mantener vivo en Render/Railway/etc.)
@@ -233,8 +240,9 @@ def evaluar_señales_pendientes():
         except Exception:
             continue
 
-        if (ahora - fecha_señal) < timedelta(hours=HORAS_PARA_EVALUAR):
-            continue  # todavía no ha pasado suficiente tiempo
+        horas_espera = HORAS_EVALUACION_POR_ESTRATEGIA.get(fila["Estrategia"], 4)
+        if (ahora - fecha_señal) < timedelta(hours=horas_espera):
+            continue  # todavía no ha pasado suficiente tiempo para ESTA estrategia
 
         ticker = ACTIVOS.get(fila["Activo"])
         if not ticker:
@@ -264,7 +272,7 @@ def evaluar_señales_pendientes():
 
         emoji_res = "✅" if "Acierto" in resultado_final else "❌"
         enviar_alerta(
-            f"📋 *EVALUACIÓN DE SEÑAL ({HORAS_PARA_EVALUAR}h después)*\n"
+            f"📋 *EVALUACIÓN DE SEÑAL ({horas_espera}h después)*\n"
             f"🌐 {fila['Activo']} — {fila['Estrategia']}\n"
             f"Señal original: {fila['Señal']}\n"
             f"Precio señal: `${precio_señal:,.2f}` → Precio ahora: `${precio_hoy:,.2f}`\n"
@@ -285,8 +293,8 @@ def iniciar_bot():
     enviar_alerta(
         "🚀 *Oculoos Bot de Señales Reales — Iniciado*\n"
         "Calcula las 3 estrategias con datos verdaderos de mercado (sin aleatoriedad).\n"
-        "Solo avisa cuando una señal CAMBIA, y evalúa cada señal "
-        f"{HORAS_PARA_EVALUAR}h después para ver si acertó."
+        "Solo avisa cuando una señal CAMBIA. Cada estrategia se evalúa a su propio ritmo:\n"
+        "🌅 ORB: 2h | 🧲 Pullbacks: 6h | 📊 Confluencia Clásica: 72h (3 días)"
     )
 
     while True:
@@ -312,6 +320,7 @@ def iniciar_bot():
                     if es_señal_accionable(señal_actual):
                         registrar_señal(activo, estrategia, resultado)
                         rsi_txt = f"{resultado['rsi']:.1f}" if resultado["rsi"] is not None else "N/A"
+                        horas_esta_estrategia = HORAS_EVALUACION_POR_ESTRATEGIA.get(estrategia, 4)
                         enviar_alerta(
                             f"📊 *NUEVA SEÑAL DETECTADA*\n\n"
                             f"🌐 *Activo:* {activo}\n"
@@ -320,7 +329,7 @@ def iniciar_bot():
                             f"💵 *Precio:* `${resultado['precio']:,.2f}`\n"
                             f"📐 *RSI:* `{rsi_txt}`\n\n"
                             f"⚠️ Esto es una SEÑAL, no una operación ejecutada. "
-                            f"Se evaluará sola en {HORAS_PARA_EVALUAR}h para ver si acertó."
+                            f"Se evaluará sola en {horas_esta_estrategia}h para ver si acertó."
                         )
                     else:
                         print(f"{clave}: cambió a '{señal_actual}' (no accionable, no se registra ni avisa)")
