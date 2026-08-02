@@ -18,7 +18,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🟢 Motor Oculoos Multisenibilidad Activo y Monitoreando Binance 24/7."
+    return "🟢 Motor Oculoos Multisenibilidad Activo."
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -48,9 +48,16 @@ def registrar_operacion(estrategia, sensibilidad, activo, precio, resultado, mon
     print(f"[{fecha_hora}] Registrado: {estrategia} | {sensibilidad}")
 
 def iniciar_bot():
-    enviar_alerta("🟢 *Oculoos Cloud (Render Web) - Actualizado* | Estrategia Fibonacci Integrada. Conectado a Binance.")
+    # Mensaje de inicio
+    enviar_alerta("🟢 *Oculoos Cloud* | Estrategia VIP S. Loaiza Integrada. Conectado a Servidor USA (Anti-Bloqueo).")
     
-    estrategias = ["Cazador de Pullbacks", "Cruce de EMAs (Institucional)", "Ruptura de Rango de Volumen", "Retrocesos de Fibonacci (Aura/Niveles Clave)"]
+    estrategias = [
+        "Cazador de Pullbacks", 
+        "Cruce de EMAs (Institucional)", 
+        "Ruptura de Rango de Volumen", 
+        "Retrocesos de Fibonacci (Aura/Niveles Clave)",
+        "Confluencia VIP (S. Loaiza: Gann 0.5 + Fibo 0.85/0.95)"
+    ]
     
     niveles_sensibilidad = {
         "Sensibilidad 0 (Estándar/Base)": "Filtros estrictos y conservadores. Máxima exigencia matemática.",
@@ -60,8 +67,11 @@ def iniciar_bot():
     }
 
     while True:
+        # Espera un minuto antes de iniciar el ciclo para asegurar la conexión
+        time.sleep(60) 
         try:
-            url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+            # Usamos Binance.US para saltar el bloqueo de IP a los servidores de Render en Estados Unidos
+            url = "https://api.binance.us/api/v3/ticker/price?symbol=BTCUSDT"
             respuesta = requests.get(url, timeout=10).json()
             
             if 'price' in respuesta:
@@ -78,7 +88,7 @@ def iniciar_bot():
                     f"📊 *REPORTE DE MAPEO MULTISENSIBILIDAD*\n\n"
                     f"⚙️ *Nivel:* `{sensibilidad_key}`\n"
                     f"📈 *Estrategia:* {estrategia_actual}\n"
-                    f"💵 *Precio Real Binance:* `${precio_btc:,.2f} USD`\n"
+                    f"💵 *Precio Real (BTC):* `${precio_btc:,.2f} USD`\n"
                     f"📈 *Resultado:* {estado_res} (`{monto_resultado:+.2f} USD`)\n\n"
                     f"🧠 *Contexto:*\n_{contexto_sensibilidad}_"
                 )
@@ -88,8 +98,6 @@ def iniciar_bot():
                 
         except Exception as e:
             print(f"Error de conexión: {e}")
-            
-        time.sleep(60)
 
 if __name__ == '__main__':
     hilo_bot = threading.Thread(target=iniciar_bot)
