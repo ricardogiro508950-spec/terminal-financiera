@@ -145,7 +145,14 @@ if modo_app == "📊 Terminal Principal":
         st.subheader("⚙️ Configuración del Radar Multi-Estrategia")
         col_ctrl1, col_ctrl2, col_ctrl3 = st.columns(3)
         with col_ctrl1: asset_choice = st.selectbox("Activo a analizar:", ACTIVOS_DISPONIBLES, key="asset_live_choice")
-        with col_ctrl2: estrategia = st.selectbox("🎯 Motor Estratégico:", ["📊 Confluencia Clásica", "🌅 Primera Vela (ORB)", "🧲 Cazador de Pullbacks", "📐 Retrocesos de Fibonacci (Aura/Niveles Clave)"], key="strat_selector")
+        with col_ctrl2: 
+            estrategia = st.selectbox("🎯 Motor Estratégico:", [
+                "📊 Confluencia Clásica", 
+                "🌅 Primera Vela (ORB)", 
+                "🧲 Cazador de Pullbacks", 
+                "📐 Retrocesos de Fibonacci (Aura/Niveles Clave)",
+                "🎯 Confluencia VIP (S. Loaiza: Gann 0.5 + Fibo 0.85/0.95)"
+            ], key="strat_selector")
         with col_ctrl3:
             if "Primera Vela" in estrategia: selected_timeframe = st.selectbox("Temporalidad:", ["15 Minutos (15m)", "5 Minutos (5m)"], key="tf_orb")
             elif "Pullbacks" in estrategia: selected_timeframe = st.selectbox("Temporalidad:", ["15 Minutos (15m)", "1 Hora (1h)"], key="tf_pull")
