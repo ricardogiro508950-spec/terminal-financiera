@@ -94,12 +94,12 @@ def obtener_historico_binance(symbol="BTCUSDT", interval="15m", limit=100):
     except Exception:
         fechas = pd.date_range(end=datetime.datetime.now(), periods=limit, freq='15min')
         base = 63000.0
-        precios = base + np.random.randn(limit).cumsum() * 20
+        precios = base + np.random.randn(limit).cumsum() * 50
         df = pd.DataFrame({
             'timestamp': fechas,
-            'open': precios - 10,
-            'high': precios + 25,
-            'low': precios - 25,
+            'open': precios - 20,
+            'high': precios + 60,
+            'low': precios - 60,
             'close': precios,
             'volume': np.random.rand(limit) * 1000
         })
@@ -188,7 +188,7 @@ if menu_opcion == "📊 Terminal Principal":
 
     st.markdown("---")
 
-    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS ---
+    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS (CORREGIDO PARA ESCALA REAL) ---
     st.markdown(f"#### 📈 Análisis Cuantitativo [15 Minutos (15m)] & Gráficos")
     simbolo_map = {"Bitcoin": "BTCUSDT", "Ethereum": "ETHUSDT", "Oro": "BTCUSDT"}
     simbolo_activo = simbolo_map.get(activo_analizar, "BTCUSDT")
@@ -212,8 +212,9 @@ if menu_opcion == "📊 Terminal Principal":
     with col_ind4:
         st.metric(label="Sentimiento", value="20 (Miedo E.)")
 
+    # Corrección del gráfico: columnas ordenadas y limpias para visualización fluida del precio
     chart_data = df_historico.set_index('timestamp')[['close', 'EMA_50', 'EMA_200']]
-    chart_data.columns = ['Precio', 'EMA 50', 'EMA 200']
+    chart_data.columns = ['Precio Actual', 'EMA 50', 'EMA 200']
     st.line_chart(chart_data)
 
     st.markdown("---")
