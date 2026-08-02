@@ -4,7 +4,9 @@ import numpy as np
 import os
 from datetime import datetime
 
-# --- Configuración Avanzada de la Página ---
+# ==========================================
+# 1. CONFIGURACIÓN Y ESTILOS AVANZADOS
+# ==========================================
 st.set_page_config(
     page_title="Oculoos Terminal Financiera Profesional",
     page_icon="🛡️",
@@ -12,31 +14,37 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Estilos CSS Personalizados para la Interfaz ---
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; color: #ffffff; }
-    .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { background-color: #161b22; border-radius: 5px; color: white; padding: 10px 20px; }
-    .stTabs [aria-selected="true"] { background-color: #238636 !important; }
+    .main { background-color: #0b0f19; color: #f0f6fc; }
+    .stMetric { background-color: #161b22; padding: 18px; border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .stTabs [data-baseweb="tab-list"] { gap: 12px; }
+    .stTabs [data-baseweb="tab"] { background-color: #161b22; border-radius: 8px; color: #c9d1d9; padding: 12px 24px; font-weight: 600; border: 1px solid #30363d; }
+    .stTabs [aria-selected="true"] { background-color: #238636 !important; color: #ffffff !important; border: 1px solid #2ea043; }
+    .sidebar .sidebar-content { background-color: #161b22; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Encabezado Principal ---
-st.title("🛡️ Oculoos Terminal Financiera & Motor Multi-Activo")
-st.markdown("Plataforma analítica centralizada, control de riesgo institucional y sincronización en tiempo real con el motor de la nube.")
+# ==========================================
+# 2. ENCABEZADO Y DESCRIPCIÓN DE LA TERMINAL
+# ==========================================
+st.title("🛡️ Oculoos Terminal Financiera & Motor Analítico Multi-Activo")
+st.markdown("Plataforma centralizada de alta precisión. Procesamiento de estadísticas, cruce de estrategias y análisis de rendimiento en tiempo real.")
 
-# --- Barra Lateral: Configuración Completa del Sistema ---
-st.sidebar.header("⚙️ Panel de Control & Estrategias")
+# ==========================================
+# 3. BARRA LATERAL (CONTROLES, FILTROS Y PARÁMETROS)
+# ==========================================
+st.sidebar.header("⚙️ Configuración del Sistema")
 
+st.sidebar.subheader("🌐 Selector de Mercados")
 activo_seleccionado = st.sidebar.selectbox(
-    "Seleccionar Mercado / Activo:",
+    "Filtrar por Activo / Mercado:",
     ["Todos los Activos", "Bitcoin (BTCUSDT)", "Ethereum (ETHUSDT)", "Oro / XAU", "Nasdaq / NQ", "Petróleo / WTI"]
 )
 
+st.sidebar.subheader("📈 Selector de Estrategias")
 estrategia_seleccionada = st.sidebar.selectbox(
-    "Seleccionar Estrategia Activa:",
+    "Filtrar por Estrategia Activa:",
     [
         "Todas las Estrategias",
         "Cazador de Pullbacks", 
@@ -47,9 +55,11 @@ estrategia_seleccionada = st.sidebar.selectbox(
     ]
 )
 
+st.sidebar.subheader("⚙️ Sensibilidad y Motores")
 sensibilidad_nivel = st.sidebar.selectbox(
-    "Nivel de Sensibilidad del Motor:",
+    "Nivel de Sensibilidad del Algoritmo:",
     [
+        "Todos los Niveles",
         "Sensibilidad 0 (Estándar/Base)", 
         "Sensibilidad 1 (Moderada)", 
         "Sensibilidad 2 (Activa)", 
@@ -58,50 +68,63 @@ sensibilidad_nivel = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Parámetros de Gestión de Riesgo")
+st.sidebar.subheader("📊 Gestión de Riesgo y Apalancamiento")
 riesgo_op = st.sidebar.slider("Riesgo Máximo por Operación (%)", 0.5, 3.0, 1.0, 0.1)
 drawdown_max = st.sidebar.slider("Límite de Pérdida Diaria (%)", 1.0, 10.0, 3.0, 0.5)
-apalancamiento = st.sidebar.selectbox("Factor de Apalancamiento", ["1x", "5x", "10x", "20x"])
+apalancamiento = st.sidebar.selectbox("Factor de Apalancamiento Operativo", ["1x", "5x", "10x", "20x", "50x"])
 
 st.sidebar.info(
-    "💡 **Instrucciones:**\n"
-    "- Los datos se actualizan automáticamente desde el archivo de la nube.\n"
-    "- Utiliza las pestañas principales para alternar entre análisis de rendimiento, bitácora y gráficos técnicos."
+    "💡 **Centro de Control Oculoos:**\n"
+    "- La aplicación procesa localmente el archivo CSV generado en la nube.\n"
+    "- Utiliza los filtros superiores para aislar comportamientos específicos por activo o estrategia."
 )
 
-# --- Carga y Procesamiento del Historial (CSV Unificado) ---
+# ==========================================
+# 4. CARGA Y PROCESAMIENTO DE DATOS (CSV UNIFICADO)
+# ==========================================
 archivo_csv = "historial_sensibilidades_real.csv"
 
 if os.path.exists(archivo_csv):
     try:
-        df = pd.read_csv(archivo_csv)
+        df_original = pd.read_csv(archivo_csv)
         
-        # Validación de columnas básicas
-        if df.empty:
-            st.warning("⚠️ El archivo de bitácora está vacío actualmente.")
+        if df_original.empty:
+            st.warning("⚠️ El archivo de bitácora se encuentra vacío actualmente.")
         
-        # Filtrado dinámico según la barra lateral
-        df_filtrado = df.copy()
-        if activo_seleccionado != "Todos los Activos" and 'Activo' in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado['Activo'].str.contains(activo_seleccionado.split()[0], case=False, na=False)]
+        # Copia de trabajo para filtrado interactivo
+        df = df_original.copy()
+        
+        # Aplicación de filtros de la barra lateral
+        if activo_seleccionado != "Todos los Activos" and 'Activo' in df.columns:
+            df = df[df['Activo'].str.contains(activo_seleccionado.split()[0], case=False, na=False)]
             
-        if estrategia_seleccionada != "Todas las Estrategias" and 'Estrategia' in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado['Estrategia'] == estrategia_seleccionada]
+        if estrategia_seleccionada != "Todas las Estrategias" and 'Estrategia' in df.columns:
+            df = df[df['Estrategia'] == estrategia_seleccionada]
+            
+        if sensibilidad_nivel != "Todos los Niveles" and 'Sensibilidad' in df.columns:
+            df = df[df['Sensibilidad'].str.contains(sensibilidad_nivel.split()[0], case=False, na=False)]
 
-        # Métricas Principales del Dashboard
-        capital_actual = df.iloc[-1]['Capital_Acumulado'] if not df.empty else 100.0
-        rendimiento_global = df.iloc[-1]['Rendimiento_Total_Pct'] if not df.empty else "+0.00%"
-        total_operaciones = len(df)
+        # ==========================================
+        # 5. CÁLCULOS MATEMÁTICOS Y ESTADÍSTICOS
+        # ==========================================
+        capital_actual = df_original.iloc[-1]['Capital_Acumulado'] if not df_original.empty else 100.0
+        rendimiento_global = df_original.iloc[-1]['Rendimiento_Total_Pct'] if not df_original.empty else "+0.00%"
+        total_operaciones = len(df_original)
         
-        # Cálculo de WinRate (Tasa de acierto)
-        if not df.empty and 'Resultado' in df.columns:
-            ganadas = df[df['Resultado'].str.contains("GANANCIA", na=False)].shape[0]
+        # Cálculo de WinRate y métricas secundarias
+        if not df_original.empty and 'Resultado' in df_original.columns:
+            ganadas = df_original[df_original['Resultado'].str.contains("GANANCIA", na=False)].shape[0]
+            perdidas = df_original[df_original['Resultado'].str.contains("PÉRDIDA", na=False)].shape[0]
             win_rate = (ganadas / total_operaciones) * 100 if total_operaciones > 0 else 0.0
+            
+            impacto_neto = df_original['Impacto_USD'].sum() if 'Impacto_USD' in df_original.columns else 0.0
         else:
-            win_rate = 0.0
+            ganadas, perdidas, win_rate, impacto_neto = 0, 0, 0.0, 0.0
 
-        # --- Panel de Métricas Superior (KPIs) ---
-        col1, col2, col3, col4 = st.columns(4)
+        # ==========================================
+        # 6. PANEL DE MÉTRICAS SUPERIOR (KPIs)
+        # ==========================================
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             st.metric(label="💰 Capital Total Actual", value=f"${capital_actual:,.2f} USD")
         with col2:
@@ -109,89 +132,143 @@ if os.path.exists(archivo_csv):
         with col3:
             st.metric(label="🎯 Tasa de Acierto (WinRate)", value=f"{win_rate:.1f}%")
         with col4:
+            st.metric(label="💵 Impacto Neto (USD)", value=f"${impacto_neto:+,.2f}")
+        with col5:
             st.metric(label="📈 Operaciones Totales", value=str(total_operaciones))
 
         st.markdown("---")
 
-        # --- Pestañas de Análisis Completo ---
-        tab_bitacora, tab_rendimiento, tab_activos, tab_indicadores, tab_config = st.tabs([
-            "📋 Bitácora en Vivo", 
+        # ==========================================
+        # 7. PESTAÑAS DE ANÁLISIS E INTERACTIVIDAD
+        # ==========================================
+        tab_bitacora, tab_estrategias, tab_activos, tab_matematico, tab_exportar = st.tabs([
+            "📋 Bitácora Interactiva", 
             "📊 Rendimiento por Estrategia", 
             "🌐 Rendimiento por Activo",
-            "📉 Motor Técnico y Gráficos", 
-            "⚙️ Respaldo y Datos"
+            "📉 Motor Matemático y Gráficos", 
+            "⚙️ Gestión y Exportación"
         ])
 
+        # --- PESTAÑA 1: BITÁCORA INTERACTIVA ---
         with tab_bitacora:
-            st.subheader("Registro Detallado de Operaciones (Sincronizado con Nube)")
-            st.markdown("Visualización completa de cada ejecución enviada por el bot a Telegram y almacenada en la base de datos.")
+            st.subheader("Bitácora General de Operaciones")
+            st.markdown("Registro detallado filtrado según los parámetros seleccionados en el panel de control lateral.")
             
-            if not df_filtrado.empty:
-                st.dataframe(df_filtrado, use_container_width=True)
+            if not df.empty:
+                st.dataframe(df, use_container_width=True)
+                
+                st.markdown("#### Resumen Rápido del Filtro Actual")
+                f_col1, f_col2, f_col3 = st.columns(3)
+                with f_col1:
+                    st.metric("Operaciones en Filtro", len(df))
+                with f_col2:
+                    impacto_filtro = df['Impacto_USD'].sum() if 'Impacto_USD' in df.columns else 0.0
+                    st.metric("Impacto del Filtro (USD)", f"${impacto_filtro:+,.2f}")
+                with f_col3:
+                    ganadas_filtro = df[df['Resultado'].str.contains("GANANCIA", na=False)].shape[0] if 'Resultado' in df.columns else 0
+                    wr_filtro = (ganadas_filtro / len(df)) * 100 if len(df) > 0 else 0.0
+                    st.metric("WinRate del Filtro", f"{wr_filtro:.1f}%")
             else:
-                st.info("No hay registros que coincidan con los filtros seleccionados en la barra lateral.")
+                st.info("No hay registros que coincidan con los filtros aplicados actualmente.")
 
-        with tab_rendimiento:
-            st.subheader("Estadísticas de Rentabilidad Cruzada por Estrategia")
-            st.markdown("Análisis detallado de qué estrategias están generando mayor impacto positivo en dólares y volumen.")
+        # --- PESTAÑA 2: RENDIMIENTO POR ESTRATEGIA ---
+        with tab_estrategias:
+            st.subheader("Estadísticas Cruzadas por Estrategia")
+            st.markdown("Evaluación matemática del desempeño individual de cada estrategia aplicada en el sistema.")
             
-            if not df.empty and 'Estrategia' in df.columns:
-                resumen_est = df.groupby('Estrategia').agg(
+            if not df_original.empty and 'Estrategia' in df_original.columns:
+                resumen_est = df_original.groupby('Estrategia').agg(
+                    Impacto_Total_USD=('Impacto_USD', 'sum'),
+                    Total_Operaciones=('Impacto_USD', 'count'),
+                    Promedio_Impacto=('Impacto_USD', 'mean')
+                ).reset_index()
+                
+                resumen_est['Impacto_Total_USD'] = resumen_est['Impacto_Total_USD'].round(2)
+                resumen_est['Promedio_Impacto'] = resumen_est['Promedio_Impacto'].round(2)
+                
+                st.dataframe(resumen_est, use_container_width=True)
+                
+                st.markdown("#### Gráfico de Impacto Financiero por Estrategia")
+                if not resumen_est.empty:
+                    st.bar_chart(resumen_est.set_index('Estrategia')['Impacto_Total_USD'])
+            else:
+                st.info("Recopilando suficientes métricas para el desglose por estrategia...")
+
+        # --- PESTAÑA 3: RENDIMIENTO POR ACTIVO ---
+        with tab_activos:
+            st.subheader("Desglose Analítico por Mercado / Activo")
+            st.markdown("Comparativa de rentabilidad y volumen de operaciones entre los diferentes activos monitoreados.")
+            
+            if not df_original.empty and 'Activo' in df_original.columns:
+                resumen_act = df_original.groupby('Activo').agg(
                     Impacto_Total_USD=('Impacto_USD', 'sum'),
                     Total_Operaciones=('Impacto_USD', 'count')
                 ).reset_index()
                 
-                st.dataframe(resumen_est, use_container_width=True)
+                resumen_act['Impacto_Total_USD'] = resumen_act['Impacto_Total_USD'].round(2)
                 
-                if 'Capital_Acumulado' in df.columns:
-                    st.markdown("#### Evolución Gráfica del Capital Compuesto")
-                    st.line_chart(df['Capital_Acumulado'])
-            else:
-                st.info("Recopilando suficientes métricas para el desglose por estrategia...")
-
-        with tab_activos:
-            st.subheader("Rendimiento Desglosado por Mercado / Activo")
-            st.markdown("Compara el comportamiento del capital operando en Bitcoin, Ethereum, Oro, Nasdaq y Petróleo.")
-            
-            if not df.empty and 'Activo' in df.columns:
-                resumen_activos = df.groupby('Activo').agg(
-                    Impacto_USD=('Impacto_USD', 'sum'),
-                    Operaciones=('Impacto_USD', 'count')
-                ).reset_index()
+                st.dataframe(resumen_act, use_container_width=True)
                 
-                st.dataframe(resumen_activos, use_container_width=True)
-                st.bar_chart(resumen_activos.set_index('Activo')['Impacto_USD'])
+                st.markdown("#### Comparativa de Ganancias/Pérdidas por Activo")
+                st.bar_chart(resumen_act.set_index('Activo')['Impacto_Total_USD'])
             else:
-                st.info("Esperando datos multi-activo para generar la comparativa...")
+                st.info("Esperando flujo de datos multi-activo...")
 
-        with tab_indicadores:
-            st.subheader("Motor Técnico y Comportamiento del Precio")
-            st.markdown("Seguimiento en tiempo real de los precios de mercado registrados por las llamadas a las APIs.")
+        # --- PESTAÑA 4: MOTOR MATEMÁTICO Y GRÁFICOS ---
+        with tab_matematico:
+            st.subheader("Evolución del Capital y Comportamiento de Precios")
+            st.markdown("Análisis visual de la curva de crecimiento compuesto y el comportamiento de los activos en el tiempo.")
             
-            if not df.empty and 'Precio_Mercado' in df.columns and 'Fecha_Hora' in df.columns:
-                st.line_chart(df.set_index('Fecha_Hora')['Precio_Mercado'])
-            elif not df.empty and 'Precio_Binance' in df.columns and 'Fecha_Hora' in df.columns:
-                st.line_chart(df.set_index('Fecha_Hora')['Precio_Binance'])
+            if not df_original.empty:
+                col_g1, col_g2 = st.columns(2)
+                
+                with col_g1:
+                    st.markdown("#### Curva de Capital Acumulado")
+                    if 'Capital_Acumulado' in df_original.columns:
+                        st.line_chart(df_original['Capital_Acumulado'])
+                    else:
+                        st.info("Datos insuficientes para la curva de capital.")
+                        
+                with col_g2:
+                    st.markdown("#### Comportamiento de Precios de Mercado")
+                    if 'Precio_Mercado' in df_original.columns and 'Fecha_Hora' in df_original.columns:
+                        st.line_chart(df_original.set_index('Fecha_Hora')['Precio_Mercado'])
+                    elif 'Precio_Binance' in df_original.columns and 'Fecha_Hora' in df_original.columns:
+                        st.line_chart(df_original.set_index('Fecha_Hora')['Precio_Binance'])
+                    else:
+                        st.info("Datos insuficientes para graficar precios.")
             else:
-                st.info("El flujo de precios se graficará automáticamente al completarse nuevos ciclos.")
+                st.info("Esperando registros activos para procesar los gráficos matemáticos.")
 
-        with tab_config:
-            st.subheader("Exportación y Respaldo del Historial")
-            st.markdown("Descarga la base de datos completa en formato CSV para análisis externo o respaldos locales.")
+        # --- PESTAÑA 5: GESTIÓN Y EXPORTACIÓN ---
+        with tab_exportar:
+            st.subheader("Herramientas de Respaldo y Exportación de Datos")
+            st.markdown("Descarga los archivos limpios y procesados para auditorías o análisis externos en hojas de cálculo.")
             
-            csv_data = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Descargar Base de Datos Completa (.CSV)",
-                data=csv_data,
-                file_name="historial_oculoos_multiactivo_completo.csv",
-                mime="text/csv"
-            )
+            col_exp1, col_exp2 = st.columns(2)
+            with col_exp1:
+                csv_data = df_original.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Descargar Base de Datos Completa (.CSV)",
+                    data=csv_data,
+                    file_name="historial_oculoos_general_completo.csv",
+                    mime="text/csv"
+                )
+            with col_exp2:
+                if not df.empty:
+                    csv_filtrado = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Descargar Datos Filtrados Actuales (.CSV)",
+                        data=csv_filtrado,
+                        file_name="historial_oculoos_filtrado.csv",
+                        mime="text/csv"
+                    )
 
     except Exception as e:
-        st.error(f"Error procesando la estructura de datos: {e}")
+        st.error(f"Error procesando la estructura analítica de la app: {e}")
 else:
-    # Estado inicial si el archivo CSV aún no ha sido creado por el bot de la nube
-    col1, col2, col3, col4 = st.columns(4)
+    # Estado por defecto cuando el archivo CSV aún no ha sido sincronizado
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric(label="💰 Capital Base", value="$100.00 USD")
     with col2:
@@ -199,10 +276,14 @@ else:
     with col3:
         st.metric(label="🎯 Tasa de Acierto", value="0.0%")
     with col4:
+        st.metric(label="💵 Impacto Neto", value="$0.00")
+    with col5:
         st.metric(label="📈 Operaciones Totales", value="0")
         
-    st.warning("⚠️ El motor en la nube se encuentra activo, pero aún no se han registrado operaciones en el archivo CSV compartido. Los datos aparecerán automáticamente en la interfaz en cuanto se ejecute el primer ciclo.")
+    st.warning("⚠️ El motor en la nube se encuentra en ejecución, pero aún no ha escrito registros en el archivo CSV compartido. Los datos se cargarán e interactuarán automáticamente en esta interfaz tan pronto como se reciba el primer reporte.")
 
-# --- Pie de Página Técnico ---
+# ==========================================
+# 8. PIE DE PÁGINA INSTITUCIONAL
+# ==========================================
 st.markdown("---")
-st.markdown("🔒 **Oculoos Engine Pro** - Sistema Centralizado de Alta Precisión y Control de Riesgo Multi-Activo.")
+st.markdown("🔒 **Oculoos Terminal Engine Pro v3.5** - Plataforma Analítica Independiente, Multi-Activo y de Alto Rendimiento.")
