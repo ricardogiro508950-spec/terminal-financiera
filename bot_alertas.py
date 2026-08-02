@@ -48,9 +48,10 @@ def registrar_operacion(estrategia, sensibilidad, activo, precio, resultado, mon
     print(f"[{fecha_hora}] Registrado: {estrategia} | {sensibilidad}")
 
 def iniciar_bot():
-    enviar_alerta("🟢 *Oculoos Cloud (Render Web) - Activo* | Conexión directa a Binance en vivo.")
+    enviar_alerta("🟢 *Oculoos Cloud (Render Web) - Actualizado* | Estrategia Fibonacci Integrada. Conectado a Binance.")
     
-    estrategias = ["Cazador de Pullbacks", "Cruce de EMAs (Institucional)", "Ruptura de Rango de Volumen"]
+    estrategias = ["Cazador de Pullbacks", "Cruce de EMAs (Institucional)", "Ruptura de Rango de Volumen", "Retrocesos de Fibonacci (Aura/Niveles Clave)"]
+    
     niveles_sensibilidad = {
         "Sensibilidad 0 (Estándar/Base)": "Filtros estrictos y conservadores. Máxima exigencia matemática.",
         "Sensibilidad 1 (Moderada)": "Tolerancia media graduada. Captura giros secundarios.",
@@ -91,9 +92,6 @@ def iniciar_bot():
         time.sleep(60)
 
 if __name__ == '__main__':
-    # Ejecuta el bot en segundo plano para no bloquear la web
     hilo_bot = threading.Thread(target=iniciar_bot)
     hilo_bot.start()
-    
-    # Enciende el servidor web para Render
     mantener_vivo()
