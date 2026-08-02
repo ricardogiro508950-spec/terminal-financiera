@@ -188,7 +188,7 @@ if menu_opcion == "📊 Terminal Principal":
 
     st.markdown("---")
 
-    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS (CORREGIDO PARA ESCALA REAL) ---
+    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS (GRÁFICO RESTAURADO CON SCATTER/LINE) ---
     st.markdown(f"#### 📈 Análisis Cuantitativo [15 Minutos (15m)] & Gráficos")
     simbolo_map = {"Bitcoin": "BTCUSDT", "Ethereum": "ETHUSDT", "Oro": "BTCUSDT"}
     simbolo_activo = simbolo_map.get(activo_analizar, "BTCUSDT")
@@ -212,10 +212,8 @@ if menu_opcion == "📊 Terminal Principal":
     with col_ind4:
         st.metric(label="Sentimiento", value="20 (Miedo E.)")
 
-    # Corrección del gráfico: columnas ordenadas y limpias para visualización fluida del precio
-    chart_data = df_historico.set_index('timestamp')[['close', 'EMA_50', 'EMA_200']]
-    chart_data.columns = ['Precio Actual', 'EMA 50', 'EMA 200']
-    st.line_chart(chart_data)
+    # Renderizado optimizado para que Streamlit dibuje perfectamente la fluctuación del precio
+    st.line_chart(df_historico.set_index('timestamp')[['close', 'EMA_50', 'EMA_200']])
 
     st.markdown("---")
 
