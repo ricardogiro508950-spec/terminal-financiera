@@ -17,7 +17,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🟢 Motor Oculoos con Métricas de Estrategia Activo."
+    return "🟢 Motor Oculoos con Rendimiento por Estrategia Activo."
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -44,12 +44,11 @@ def registrar_operacion(estrategia, sensibilidad, activo, precio, resultado, mon
     with open(ARCHIVO_CSV, mode='a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow([fecha_hora, estrategia, sensibilidad, activo, precio, resultado, monto_usd, capital_total, f"{rendimiento_pct:+.2f}%", contexto])
-    print(f"[{fecha_hora}] Registrado: {estrategia} | Capital: ${capital_total:.2f} | Rendimiento: {rendimiento_pct:+.2f}%")
+    print(f"[{fecha_hora}] Registrado: {estrategia} | Capital: ${capital_total:.2f}")
 
 def iniciar_bot():
     capital_inicial = 100.0
     capital_actual = capital_inicial
-    enviar_alerta(f"🟢 *Oculoos Cloud* | Métricas de Estrategia Activadas. Capital Inicial: `${capital_actual:.2f} USD`.")
     
     estrategias = [
         "Cazador de Pullbacks", 
@@ -58,6 +57,11 @@ def iniciar_bot():
         "Retrocesos de Fibonacci (Aura/Niveles Clave)",
         "Confluencia VIP (S. Loaiza: Gann 0.5 + Fibo 0.85/0.95)"
     ]
+    
+    # Diccionario para almacenar el acumulado de porcentaje de cada estrategia
+    rendimiento_estrategias = {est: 0.0 for est in estrategias}
+
+    enviar_alerta(f"🟢 *Oculoos Cloud* | Monitoreo por Estrategia Activado. Capital Inicial: `${capital_actual:.2f} USD`.")
     
     niveles_sensibilidad = {
         "Sensibilidad 0 (Estándar/Base)": "Filtros estrictos y conservadores. Máxima exigencia matemática.",
@@ -84,11 +88,19 @@ def iniciar_bot():
                 capital_actual += monto_resultado  
                 if capital_actual < 5.0: capital_actual = 5.0  
 
-                # Cálculo del porcentaje de rendimiento global de la cuenta
+                # Acumulamos el porcentaje en la estrategia que acaba de salir
+                rendimiento_estrategias[estrategia_actual] += porcentaje_op
+
                 rendimiento_global_pct = ((capital_actual - capital_inicial) / capital_inicial) * 100
-                
                 estado_res = "✅ GANANCIA" if es_ganancia else "❌ PÉRDIDA"
                 
+                # Construir la lista de estrategias y sus porcentajes actuales
+                lista_estrategias_str = ""
+                for est, pct in rendimiento_estrategias.items():
+                    # Destacar la estrategia actual con una flecha
+                    prefijo = "👉 " if est == estrategia_actual else "▪️ "
+                    lista_estrategias_str += f"{prefijo}*{est}*: `{pct:+.2f}%`\n"
+
                 mensaje_alerta = (
                     f"📊 *REPORTE DE RENDIMIENTO & ESTRATEGIA*\n\n"
                     f"⚙️ *Nivel:* `{sensibilidad_key}`\n"
@@ -97,6 +109,8 @@ def iniciar_bot():
                     f"📈 *Resultado Operación:* {estado_res} (`{monto_resultado:+.2f} USD`)\n"
                     f"💰 *Capital Total Actual:* **${capital_actual:,.2f} USD**\n"
                     f"📊 *Rendimiento Global:* `{rendimiento_global_pct:+.2f}%`\n\n"
+                    f"📋 *Rendimiento por Estrategia:*\n"
+                    f"{lista_estrategias_str}\n"
                     f"🧠 *Contexto:*\n_{contexto_sensibilidad}_"
                 )
                 
