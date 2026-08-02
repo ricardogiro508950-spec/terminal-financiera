@@ -14,7 +14,7 @@ from flask import Flask
 # ==========================================
 # CONFIGURACIÓN — usa variables de entorno, no escribas el token aquí
 # ==========================================
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "PON_TU_TOKEN_NUEVO_AQUI")
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8807352507:AAEI5mhH0Ao-heGHrsBtJVpM6geGtlMTAUo")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "8260761627")
 
 ARCHIVO_CSV = "historial_senales_reales.csv"
