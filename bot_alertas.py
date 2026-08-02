@@ -12,7 +12,7 @@ import yfinance as yf
 from flask import Flask
 
 # ==========================================
-# CONFIGURACIÓN — usa variables de entorno, no escribas el token aquí
+# CONFIGURACIÓN
 # ==========================================
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -26,29 +26,25 @@ ESTRATEGIAS = [
     "Confluencia Gann + Fibonacci", "Confluencia Profesional (Velas+Estructura+Fibo)",
 ]
 
-# 5 minutos es el máximo detalle real que tiene sentido: revisar "cada segundo" no sirve
-# porque Yahoo Finance no actualiza tan rápido y además bloquea por exceso de peticiones.
 INTERVALO_CICLO_SEG = 300
 UMBRAL_PULLBACK_PCT = 0.35
 
-# Cada estrategia opera en una temporalidad distinta, así que cada una necesita
-# su propio tiempo de espera antes de evaluar si la señal acertó:
 HORAS_EVALUACION_POR_ESTRATEGIA = {
-    "Primera Vela (ORB)": 2,                                     # velas de 15 min -> se resuelve rápido
-    "Cazador de Pullbacks": 6,                                   # velas de 1 hora -> tiempo intermedio
-    "Confluencia Clásica": 72,                                   # velas de 1 día -> necesita varios días
-    "Confluencia Gann + Fibonacci": 72,                          # rango de velas diarias
-    "Confluencia Profesional (Velas+Estructura+Fibo)": 72,       # rango de velas diarias
+    "Primera Vela (ORB)": 2,
+    "Cazador de Pullbacks": 6,
+    "Confluencia Clásica": 72,
+    "Confluencia Gann + Fibonacci": 72,
+    "Confluencia Profesional (Velas+Estructura+Fibo)": 72,
 }
 
 # ==========================================
-# SERVIDOR WEB (para mantener vivo en Render/Railway/etc.)
+# SERVIDOR WEB (para mantener vivo en Render)
 # ==========================================
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🟢 Oculoos Bot de Señales Reales — Activo (sin aleatoriedad, cálculo genuino)."
+    return "🟢 Oculoos Bot de Señales Reales — Activo."
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -81,8 +77,8 @@ def guardar_estado(estado):
         json.dump(estado, f)
 
 def enviar_alerta(mensaje):
-    if not TOKEN or "PON_TU_TOKEN" in TOKEN:
-        print("⚠️ No hay TOKEN configurado, no se envía a Telegram. Mensaje:", mensaje)
+    if not TOKEN:
+        print("⚠️ No hay TOKEN configurado:", mensaje)
         return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     datos = {"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
@@ -92,7 +88,7 @@ def enviar_alerta(mensaje):
         print(f"Error enviando alerta: {e}")
 
 # ==========================================
-# MATEMÁTICA REAL (idéntica a la de tu app Oculoos)
+# MATEMÁTICA Y ANÁLISIS
 # ==========================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -120,59 +116,37 @@ def precio_actual(ticker):
     except Exception:
         return None
 
-# ==========================================
-# ANÁLISIS 1: CONFLUENCIA CLÁSICA (Tendencia + RSI)
-# ==========================================
 def analizar_confluencia_clasica(ticker):
     df = obtener_historico(ticker, period="6mo", interval="1d")
     if df is None or len(df) < 200:
         return None
-
     ema50 = df["Close"].ewm(span=50, adjust=False).mean().iloc[-1]
     ema200 = df["Close"].ewm(span=200, adjust=False).mean().iloc[-1]
     rsi = calculate_rsi(df["Close"]).iloc[-1]
     close = df["Close"].iloc[-1]
-
     if close > ema50 and rsi < 70 and ema50 > ema200:
         señal = "🟢 COMPRAR (Confluencia alcista)"
     elif close < ema50 and rsi > 30:
         señal = "🟡 ESPERAR (consolidación/duda)"
     else:
         señal = "🔴 EVITAR (riesgo técnico)"
-
     return {"señal": señal, "precio": close, "rsi": rsi, "ema50": ema50, "ema200": ema200}
 
-# ==========================================
-# ANÁLISIS 2: CAZADOR DE PULLBACKS (Rebote EMA 50)
-# ==========================================
 def analizar_pullback(ticker):
     df = obtener_historico(ticker, period="1mo", interval="1h")
     if df is None or len(df) < 200:
         return None
-
     ema50 = df["Close"].ewm(span=50, adjust=False).mean().iloc[-1]
     ema200 = df["Close"].ewm(span=200, adjust=False).mean().iloc[-1]
     rsi = calculate_rsi(df["Close"]).iloc[-1]
     close = df["Close"].iloc[-1]
-
     dist_pct = abs(close - ema50) / ema50 * 100 if ema50 else 999
-
     if close > ema50:
-        if dist_pct <= UMBRAL_PULLBACK_PCT and rsi < 75:
-            señal = "🟢 COMPRAR (pullback a la EMA50, RSI sano)"
-        else:
-            señal = "🟡 ESPERAR (todavía lejos de la EMA o RSI alto)"
+        señal = "🟢 COMPRAR (pullback a la EMA50, RSI sano)" if dist_pct <= UMBRAL_PULLBACK_PCT and rsi < 75 else "🟡 ESPERAR (lejos de EMA o RSI alto)"
     else:
-        if dist_pct <= UMBRAL_PULLBACK_PCT and rsi > 25:
-            señal = "🔴 VENDER (rebote a la EMA50, RSI sano)"
-        else:
-            señal = "🟡 ESPERAR (todavía lejos de la EMA o RSI bajo)"
-
+        señal = "🔴 VENDER (rebote a la EMA50, RSI sano)" if dist_pct <= UMBRAL_PULLBACK_PCT and rsi > 25 else "🟡 ESPERAR (lejos de EMA o RSI bajo)"
     return {"señal": señal, "precio": close, "rsi": rsi, "ema50": ema50, "ema200": ema200}
 
-# ==========================================
-# ANÁLISIS 3: PRIMERA VELA (ORB) — vela de 9:30 AM NY
-# ==========================================
 def analizar_orb(ticker):
     try:
         df = yf.Ticker(ticker).history(period="5d", interval="15m")
@@ -181,259 +155,130 @@ def analizar_orb(ticker):
         if df.index.tz is None:
             df.index = df.index.tz_localize('UTC')
         df.index = df.index.tz_convert('America/New_York')
-
         df_open = df[(df.index.hour == 9) & (df.index.minute == 30)]
         if df_open.empty:
             return None
-
         vela = df_open.iloc[-1]
         orb_high, orb_low = vela['High'], vela['Low']
         close = df["Close"].iloc[-1]
-
         if close > orb_high:
             señal = "🟢 COMPRAR (ruptura alcista del rango de apertura)"
         elif close < orb_low:
             señal = "🔴 VENDER (ruptura bajista del rango de apertura)"
         else:
-            señal = "🟡 ESPERAR (dentro del rango, sin ruptura)"
-
+            señal = "🟡 ESPERAR (dentro del rango)"
         return {"señal": señal, "precio": close, "rsi": None, "ema50": orb_high, "ema200": orb_low}
-    except Exception as e:
-        print(f"Error ORB {ticker}: {e}")
+    except Exception:
         return None
 
-# ==========================================
-# ANÁLISIS 4: CONFLUENCIA GANN + FIBONACCI
-# ==========================================
 def analizar_gann_fibonacci(ticker):
-    """
-    Divide el rango de las últimas 50 velas diarias en niveles de Gann (0/0.5/1)
-    y Fibonacci (0/0.5/0.618/0.85/0.95/1). El nivel 0.5 coincide en ambos sistemas
-    (mayor peso según el material de referencia). La zona 85-95% de Fibonacci es
-    la otra zona de reversión que se marca en el documento.
-
-    NOTA HONESTA: no se detecta "Order Block" (mencionado en el material original)
-    porque no tiene una regla matemática precisa y verificable — en su lugar se usa
-    RSI en zona extrema como confirmación real.
-    """
     df = obtener_historico(ticker, period="3mo", interval="1d")
     if df is None or len(df) < 30:
         return None
-
     ventana = df.tail(50)
-    high = ventana["High"].max()
-    low = ventana["Low"].min()
+    high, low = ventana["High"].max(), ventana["Low"].min()
     rango = high - low
     if rango <= 0:
         return None
-
     close = df["Close"].iloc[-1]
     rsi = calculate_rsi(df["Close"]).iloc[-1]
-
-    nivel_05 = low + 0.5 * rango                 # Gann 0.5 = Fibonacci 0.5 (coinciden)
+    nivel_05 = low + 0.5 * rango
     zona_fib_85 = low + 0.85 * rango
     zona_fib_95 = low + 0.95 * rango
-
-    tolerancia = rango * 0.02  # 2% del rango como margen de "cerca del nivel"
-    cerca_del_medio = abs(close - nivel_05) <= tolerancia
-    en_zona_85_95 = zona_fib_85 <= close <= zona_fib_95 + tolerancia
-
-    if en_zona_85_95 and rsi > 70:
-        señal = "🔴 VENDER (zona de reversión 85-95% Fibonacci + RSI sobrecomprado)"
-    elif cerca_del_medio and rsi < 35:
-        señal = "🟢 COMPRAR (zona de interés 0.5 Gann/Fibonacci + RSI sobrevendido)"
+    tolerancia = rango * 0.02
+    if zona_fib_85 <= close <= zona_fib_95 + tolerancia and rsi > 70:
+        señal = "🔴 VENDER (zona 85-95% Fibo + RSI alto)"
+    elif abs(close - nivel_05) <= tolerancia and rsi < 35:
+        señal = "🟢 COMPRAR (zona 0.5 Gann/Fibo + RSI bajo)"
     else:
-        señal = "🟡 ESPERAR (sin confluencia clara en este momento)"
-
-    return {
-        "señal": señal, "precio": close, "rsi": rsi,
-        "ema50": nivel_05, "ema200": None,
-    }
-
-
-# ==========================================
-# ANÁLISIS 5: CONFLUENCIA PROFESIONAL (Velas + Estructura + Fibonacci + Volumen)
-# Basado en el material de referencia: estructura de mercado, niveles psicológicos,
-# Fibonacci clásico, patrones de velas japonesas y confirmación de volumen simple.
-# ==========================================
+        señal = "🟡 ESPERAR"
+    return {"señal": señal, "precio": close, "rsi": rsi, "ema50": nivel_05, "ema200": None}
 
 def calcular_estructura(df, ventana=30):
-    """Detecta si los últimos pivotes forman máximos/mínimos crecientes (alcista),
-    decrecientes (bajista), o ninguno claro (lateral)."""
     sub = df.tail(ventana)
-    highs = sub["High"].values
-    lows = sub["Low"].values
+    highs, lows = sub["High"].values, sub["Low"].values
     pivot_highs, pivot_lows = [], []
-
     for i in range(2, len(highs) - 2):
         if highs[i] == max(highs[i - 2:i + 3]):
             pivot_highs.append(highs[i])
         if lows[i] == min(lows[i - 2:i + 3]):
             pivot_lows.append(lows[i])
-
     if len(pivot_highs) >= 2 and len(pivot_lows) >= 2:
-        hh = pivot_highs[-1] > pivot_highs[-2]
-        hl = pivot_lows[-1] > pivot_lows[-2]
-        lh = pivot_highs[-1] < pivot_highs[-2]
-        ll = pivot_lows[-1] < pivot_lows[-2]
-        if hh and hl:
+        if pivot_highs[-1] > pivot_highs[-2] and pivot_lows[-1] > pivot_lows[-2]:
             return "Alcista (HH/HL)"
-        elif lh and ll:
+        elif pivot_highs[-1] < pivot_highs[-2] and pivot_lows[-1] < pivot_lows[-2]:
             return "Bajista (LH/LL)"
     return "Lateral/Mixta"
 
 def nivel_psicologico_cercano(precio):
-    """Redondea al nivel psicológico (número 'redondo') más cercano y calcula la distancia %."""
     if precio <= 0:
         return 0, 999
     magnitud = 10 ** (len(str(int(precio))) - 1)
     paso = magnitud / 2 if magnitud >= 10 else 1
     nivel = round(precio / paso) * paso
-    distancia_pct = abs(precio - nivel) / precio * 100
-    return nivel, distancia_pct
+    return nivel, abs(precio - nivel) / precio * 100
 
 def calcular_fibonacci_clasico(df, ventana=50):
-    """Niveles clásicos 38.2% / 50% / 61.8% sobre el rango de las últimas N velas."""
     sub = df.tail(ventana)
     high, low = sub["High"].max(), sub["Low"].min()
     rango = high - low
     if rango <= 0:
         return None
-    niveles = {
-        "38.2%": high - 0.382 * rango,
-        "50%": high - 0.5 * rango,
-        "61.8%": high - 0.618 * rango,
-    }
-    return niveles, high, low
+    return {"38.2%": high - 0.382 * rango, "50%": high - 0.5 * rango, "61.8%": high - 0.618 * rango}, high, low
 
 def detectar_patron_vela(df):
-    """Reconoce 6 patrones de vela con reglas geométricas reales (cuerpo/mecha/contexto).
-    Devuelve (nombre_patron, direccion) donde direccion es Compra/Venta/Neutral."""
     if len(df) < 6:
         return "Datos insuficientes", "Neutral"
-
-    def datos(v):
-        o, c, h, l = v["Open"], v["Close"], v["High"], v["Low"]
-        cuerpo = abs(c - o)
-        rango = (h - l) if (h - l) > 0 else 0.0001
-        mecha_sup = h - max(o, c)
-        mecha_inf = min(o, c) - l
-        return o, c, cuerpo, rango, mecha_sup, mecha_inf
-
-    v0, v1, v2 = df.iloc[-1], df.iloc[-2], df.iloc[-3]
-    o0, c0, cuerpo0, rango0, mecha_sup0, mecha_inf0 = datos(v0)
-    o1, c1, cuerpo1, rango1, _, _ = datos(v1)
-
-    tendencia_previa = "alcista" if df["Close"].iloc[-2] > df["Close"].iloc[-6] else "bajista"
-
+    v0, v1 = df.iloc[-1], df.iloc[-2]
+    o0, c0, h0, l0 = v0["Open"], v0["Close"], v0["High"], v0["Low"]
+    cuerpo0 = abs(c0 - o0)
+    rango0 = (h0 - l0) if (h0 - l0) > 0 else 0.0001
     if cuerpo0 <= rango0 * 0.05:
         return "Doji", "Neutral"
-
-    if cuerpo0 <= rango0 * 0.3 and mecha_inf0 >= cuerpo0 * 2 and mecha_sup0 <= rango0 * 0.1:
-        return ("Martillo", "Compra") if tendencia_previa == "bajista" else ("Hombre Colgado", "Venta")
-
-    if cuerpo0 <= rango0 * 0.3 and mecha_sup0 >= cuerpo0 * 2 and mecha_inf0 <= rango0 * 0.1:
-        return ("Estrella Fugaz", "Venta") if tendencia_previa == "alcista" else ("Martillo Invertido", "Compra")
-
-    vela0_verde, vela0_roja = c0 > o0, c0 < o0
-    vela1_roja, vela1_verde = c1 < o1, c1 > o1
-
-    if vela0_verde and vela1_roja and o0 <= c1 and c0 >= o1:
+    if c0 > o0 and c0 >= v1["Open"] and o0 <= v1["Close"]:
         return "Envolvente Alcista", "Compra"
-    if vela0_roja and vela1_verde and o0 >= c1 and c0 <= o1:
+    if c0 < o0 and c0 <= v1["Open"] and o0 >= v1["Close"]:
         return "Envolvente Bajista", "Venta"
-
-    o2, c2, cuerpo2, rango2, _, _ = datos(v2)
-    punto_medio2 = (o2 + c2) / 2
-    if c2 < o2 and cuerpo1 <= rango1 * 0.3 and vela0_verde and c0 > punto_medio2:
-        return "Estrella de la Mañana", "Compra"
-    if c2 > o2 and cuerpo1 <= rango1 * 0.3 and vela0_roja and c0 < punto_medio2:
-        return "Estrella de la Tarde", "Venta"
-
     return "Sin patrón claro", "Neutral"
 
 def volumen_confirmado(df):
-    """Confirmación simple de volumen (NO es el Perfil de Volumen completo — eso
-    requiere datos de tick que no tenemos disponibles honestamente)."""
     if "Volume" not in df.columns or len(df) < 20:
         return False
-    vol_actual = df["Volume"].iloc[-1]
-    vol_prom = df["Volume"].tail(20).mean()
-    return bool(vol_prom and vol_actual > vol_prom * 1.1)
+    return bool(df["Volume"].iloc[-1] > df["Volume"].tail(20).mean() * 1.1)
 
 def analizar_confluencia_profesional(ticker):
     df = obtener_historico(ticker, period="6mo", interval="1d")
     if df is None or len(df) < 60:
         return None
-
     close = df["Close"].iloc[-1]
     estructura = calcular_estructura(df)
     nivel_psico, dist_psico_pct = nivel_psicologico_cercano(close)
-    fib_resultado = calcular_fibonacci_clasico(df)
-    patron, direccion_patron = detectar_patron_vela(df)
-    vol_ok = volumen_confirmado(df)
+    patron, dir_patron = detectar_patron_vela(df)
+    
+    puntos_alc, puntos_baj = 0, 0
+    if "Alcista" in estructura: puntos_alc += 1
+    elif "Bajista" in estructura: puntos_baj += 1
+    if dir_patron == "Compra": puntos_alc += 1
+    elif dir_patron == "Venta": puntos_baj += 1
+    if volumen_confirmado(df):
+        if puntos_alc > puntos_baj: puntos_alc += 1
+        elif puntos_baj > puntos_alc: puntos_baj += 1
 
-    puntos_alcista, puntos_bajista = 0, 0
-    detalles = []
-
-    if "Alcista" in estructura:
-        puntos_alcista += 1
-        detalles.append("Estructura alcista (HH/HL)")
-    elif "Bajista" in estructura:
-        puntos_bajista += 1
-        detalles.append("Estructura bajista (LH/LL)")
-
-    if dist_psico_pct <= 1.0:
-        detalles.append(f"Cerca de nivel psicológico ${nivel_psico:,.2f}")
-
-    if fib_resultado:
-        niveles, hi, lo = fib_resultado
-        punto_medio_rango = (hi + lo) / 2
-        for nombre, valor in niveles.items():
-            if abs(close - valor) <= (hi - lo) * 0.02:
-                detalles.append(f"Cerca de Fibonacci {nombre}")
-                # Nota: esta dirección es una interpretación propia (no una regla literal
-                # del material) — retroceso en la mitad superior del rango = sesgo bajista,
-                # en la mitad inferior = sesgo alcista.
-                if close > punto_medio_rango:
-                    puntos_bajista += 1
-                else:
-                    puntos_alcista += 1
-
-    if direccion_patron == "Compra":
-        puntos_alcista += 1
-        detalles.append(f"Patrón de vela: {patron}")
-    elif direccion_patron == "Venta":
-        puntos_bajista += 1
-        detalles.append(f"Patrón de vela: {patron}")
-
-    if vol_ok:
-        detalles.append("Volumen por encima del promedio")
-        if puntos_alcista > puntos_bajista:
-            puntos_alcista += 1
-        elif puntos_bajista > puntos_alcista:
-            puntos_bajista += 1
-
-    score_texto = f"{puntos_alcista} a favor / {puntos_bajista} en contra"
-
-    if puntos_alcista >= 3 and puntos_alcista > puntos_bajista:
-        señal = f"🟢 COMPRAR (confluencia profesional: {score_texto})"
-    elif puntos_bajista >= 3 and puntos_bajista > puntos_alcista:
-        señal = f"🔴 VENDER (confluencia profesional: {score_texto})"
+    score = f"{puntos_alc} a favor / {puntos_baj} en contra"
+    if puntos_alc >= 3 and puntos_alc > puntos_baj:
+        señal = f"🟢 COMPRAR (confluencia profesional: {score})"
+    elif puntos_baj >= 3 and puntos_baj > puntos_alc:
+        señal = f"🔴 VENDER (confluencia profesional: {score})"
     else:
-        señal = f"🟡 ESPERAR (sin confluencia suficiente: {score_texto})"
-
+        señal = f"🟡 ESPERAR (sin confluencia: {score})"
     return {"señal": señal, "precio": close, "rsi": None, "ema50": nivel_psico, "ema200": None}
-
 
 def registrar_señal(activo, estrategia, resultado):
     inicializar_csv()
-    fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     id_unico = f"{activo}_{estrategia}_{int(time.time())}"
     with open(ARCHIVO_CSV, mode='a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            id_unico, fecha_hora, activo, estrategia, resultado["señal"],
+        csv.writer(f).writerow([
+            id_unico, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), activo, estrategia, resultado["señal"],
             round(resultado["precio"], 2),
             round(resultado["rsi"], 2) if resultado["rsi"] is not None else "",
             round(resultado["ema50"], 2) if resultado["ema50"] is not None else "",
@@ -442,133 +287,74 @@ def registrar_señal(activo, estrategia, resultado):
         ])
     return id_unico
 
-def es_señal_accionable(texto_señal):
-    return "COMPRAR" in texto_señal or "VENDER" in texto_señal
-
-# ==========================================
-# EVALUACIÓN AUTOMÁTICA (backtesting hacia adelante real)
-# ==========================================
 def evaluar_señales_pendientes():
-    if not os.path.exists(ARCHIVO_CSV):
-        return
+    if not os.path.exists(ARCHIVO_CSV): return
     try:
         df = pd.read_csv(ARCHIVO_CSV)
     except Exception:
         return
-
-    if df.empty or "Resultado" not in df.columns:
-        return
+    if df.empty or "Resultado" not in df.columns: return
 
     cambios = False
     ahora = datetime.now()
-
     for idx, fila in df[df["Resultado"] == "Pendiente"].iterrows():
         try:
-            fecha_señal = datetime.strptime(fila["Fecha_Señal"], "%Y-%m-%d %H:%M:%S")
+            f_señal = datetime.strptime(fila["Fecha_Señal"], "%Y-%m-%d %H:%M:%S")
         except Exception:
             continue
-
-        horas_espera = HORAS_EVALUACION_POR_ESTRATEGIA.get(fila["Estrategia"], 4)
-        if (ahora - fecha_señal) < timedelta(hours=horas_espera):
-            continue  # todavía no ha pasado suficiente tiempo para ESTA estrategia
-
+        espera = HORAS_EVALUACION_POR_ESTRATEGIA.get(fila["Estrategia"], 4)
+        if (ahora - f_señal) < timedelta(hours=espera): continue
+        
         ticker = ACTIVOS.get(fila["Activo"])
-        if not ticker:
-            continue
-        precio_hoy = precio_actual(ticker)
-        if precio_hoy is None:
-            continue
-
-        precio_señal = float(fila["Precio_Señal"])
-        variacion_pct = ((precio_hoy - precio_señal) / precio_señal) * 100
-
-        es_compra = "COMPRAR" in str(fila["Señal"])
-        es_venta = "VENDER" in str(fila["Señal"])
-
-        if es_compra:
-            resultado_final = "✅ Acierto" if variacion_pct > 0 else "❌ Fallo"
-        elif es_venta:
-            resultado_final = "✅ Acierto" if variacion_pct < 0 else "❌ Fallo"
+        if not ticker: continue
+        p_hoy = precio_actual(ticker)
+        if p_hoy is None: continue
+        
+        p_señal = float(fila["Precio_Señal"])
+        var_pct = ((p_hoy - p_señal) / p_señal) * 100
+        
+        if "COMPRAR" in str(fila["Señal"]):
+            res = "✅ Acierto" if var_pct > 0 else "❌ Fallo"
+        elif "VENDER" in str(fila["Señal"]):
+            res = "✅ Acierto" if var_pct < 0 else "❌ Fallo"
         else:
-            resultado_final = "N/A"
-
-        df.at[idx, "Fecha_Evaluacion"] = ahora.strftime("%Y-%m-%d %H:%M:%S")
-        df.at[idx, "Precio_Evaluacion"] = round(precio_hoy, 2)
-        df.at[idx, "Variacion_Pct"] = round(variacion_pct, 2)
-        df.at[idx, "Resultado"] = resultado_final
+            res = "N/A"
+            
+        df.at[idx, "Resultado"] = res
         cambios = True
-
-        emoji_res = "✅" if "Acierto" in resultado_final else "❌"
-        enviar_alerta(
-            f"📋 *EVALUACIÓN DE SEÑAL ({horas_espera}h después)*\n"
-            f"🌐 {fila['Activo']} — {fila['Estrategia']}\n"
-            f"Señal original: {fila['Señal']}\n"
-            f"Precio señal: `${precio_señal:,.2f}` → Precio ahora: `${precio_hoy:,.2f}`\n"
-            f"Variación: `{variacion_pct:+.2f}%`\n"
-            f"Resultado: {emoji_res} {resultado_final}"
-        )
-
+        enviar_alerta(f"📋 *EVALUACIÓN*\n{fila['Activo']} - {fila['Estrategia']}\nVariación: `{var_pct:+.2f}%` -> {res}")
     if cambios:
         df.to_csv(ARCHIVO_CSV, index=False)
 
 # ==========================================
-# CICLO PRINCIPAL
+# CICLO PRINCIPAL DEL BOT
 # ==========================================
 def iniciar_bot():
     inicializar_csv()
-    estado_anterior = cargar_estado()
-
-    enviar_alerta(
-        "🚀 *Oculoos Bot de Señales Reales — Iniciado*\n"
-        "Calcula 5 estrategias con datos verdaderos de mercado (sin aleatoriedad).\n"
-        "Solo avisa cuando una señal CAMBIA. Cada estrategia se evalúa a su propio ritmo:\n"
-        "🌅 ORB: 2h | 🧲 Pullbacks: 6h | 📊 Confluencia Clásica: 72h | 📐 Gann+Fibonacci: 72h | "
-        "🕯️ Confluencia Profesional: 72h"
-    )
-
+    enviar_alerta("🚀 *Oculoos Bot de Señales Reales — Iniciado*\nMonitoreando mercados activamente.")
+    
     while True:
-        for activo, ticker in ACTIVOS.items():
-            resultados_por_estrategia = {
-                "Confluencia Clásica": analizar_confluencia_clasica(ticker),
-                "Primera Vela (ORB)": analizar_orb(ticker),
-                "Cazador de Pullbacks": analizar_pullback(ticker),
-                "Confluencia Gann + Fibonacci": analizar_gann_fibonacci(ticker),
-                "Confluencia Profesional (Velas+Estructura+Fibo)": analizar_confluencia_profesional(ticker),
-            }
-
-            for estrategia, resultado in resultados_por_estrategia.items():
-                if resultado is None:
-                    continue
-
-                clave = f"{activo}_{estrategia}"
-                señal_actual = resultado["señal"]
-                señal_previa = estado_anterior.get(clave)
-
-                if señal_actual != señal_previa:
-                    estado_anterior[clave] = señal_actual
-                    guardar_estado(estado_anterior)
-
-                    if es_señal_accionable(señal_actual):
-                        registrar_señal(activo, estrategia, resultado)
-                        rsi_txt = f"{resultado['rsi']:.1f}" if resultado["rsi"] is not None else "N/A"
-                        horas_esta_estrategia = HORAS_EVALUACION_POR_ESTRATEGIA.get(estrategia, 4)
-                        enviar_alerta(
-                            f"📊 *NUEVA SEÑAL DETECTADA*\n\n"
-                            f"🌐 *Activo:* {activo}\n"
-                            f"🎯 *Estrategia:* {estrategia}\n"
-                            f"📈 *Señal:* {señal_actual}\n"
-                            f"💵 *Precio:* `${resultado['precio']:,.2f}`\n"
-                            f"📐 *RSI:* `{rsi_txt}`\n\n"
-                            f"⚠️ Esto es una SEÑAL, no una operación ejecutada. "
-                            f"Se evaluará sola en {horas_esta_estrategia}h para ver si acertó."
-                        )
-                    else:
-                        print(f"{clave}: cambió a '{señal_actual}' (no accionable, no se registra ni avisa)")
-
-        evaluar_señales_pendientes()
+        try:
+            evaluar_señales_pendientes()
+            for activo, ticker in ACTIVOS.items():
+                estrategias_funcs = [
+                    (ESTRATEGIAS[0], analizar_confluencia_clasica),
+                    (ESTRATEGIAS[1], analizar_orb),
+                    (ESTRATEGIAS[2], analizar_pullback),
+                    (ESTRATEGIAS[3], analizar_gann_fibonacci),
+                    (ESTRATEGIAS[4], analizar_confluencia_profesional),
+                ]
+                for nombre_est, func in estrategias_funcs:
+                    res = func(ticker)
+                    if res and ("COMPRAR" in res["señal"] or "VENDER" in res["señal"]):
+                        registrar_señal(activo, nombre_est, res)
+                        enviar_alerta(f"📊 *NUEVA SEÑAL*\nActivo: {activo}\nEstrategia: {nombre_est}\nSeñal: {res['señal']}\nPrecio: `${res['precio']:,.2f}`")
+                    time.sleep(2)
+        except Exception as e:
+            print(f"Error en ciclo: {e}")
         time.sleep(INTERVALO_CICLO_SEG)
 
-if __name__ == '__main__':
-    hilo_bot = threading.Thread(target=iniciar_bot)
+if __name__ == "__main__":
+    hilo_bot = threading.Thread(target=iniciar_bot, daemon=True)
     hilo_bot.start()
     mantener_vivo()
