@@ -10,7 +10,6 @@ from flask import Flask
 # --- Credenciales ---
 TOKEN = "8807352507:AAFmMPpyWd_4hCghMqlIQGXGFNtf73WxVhs"
 CHAT_ID = "8260761627"
-CAPITAL_BASE = 100.0  
 ARCHIVO_CSV = "historial_sensibilidades_real.csv"
 
 # --- Configuración del Servidor Web (El disfraz para Render) ---
@@ -18,7 +17,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🟢 Motor Oculoos Multisenibilidad Activo."
+    return "🟢 Motor Oculoos con Capital Compuesto Activo."
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -29,7 +28,7 @@ def inicializar_csv():
     if not os.path.exists(ARCHIVO_CSV):
         with open(ARCHIVO_CSV, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(["Fecha_Hora", "Estrategia", "Sensibilidad", "Activo", "Precio_Binance", "Resultado", "Impacto_USD", "Contexto"])
+            writer.writerow(["Fecha_Hora", "Estrategia", "Sensibilidad", "Activo", "Precio_Binance", "Resultado", "Impacto_USD", "Capital_Acumulado", "Contexto"])
 
 def enviar_alerta(mensaje):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -39,17 +38,18 @@ def enviar_alerta(mensaje):
     except Exception as e:
         print(f"Error enviando alerta: {e}")
 
-def registrar_operacion(estrategia, sensibilidad, activo, precio, resultado, monto_usd, contexto):
+def registrar_operacion(estrategia, sensibilidad, activo, precio, resultado, monto_usd, capital_total, contexto):
     inicializar_csv()
     fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(ARCHIVO_CSV, mode='a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow([fecha_hora, estrategia, sensibilidad, activo, precio, resultado, monto_usd, contexto])
-    print(f"[{fecha_hora}] Registrado: {estrategia} | {sensibilidad}")
+        writer.writerow([fecha_hora, estrategia, sensibilidad, activo, precio, resultado, monto_usd, capital_total, contexto])
+    print(f"[{fecha_hora}] Registrado: {estrategia} | Capital Total: ${capital_total:.2f}")
 
 def iniciar_bot():
-    # Mensaje de inicio
-    enviar_alerta("🟢 *Oculoos Cloud* | Estrategia VIP S. Loaiza Integrada. Conectado a Servidor USA (Anti-Bloqueo).")
+    # Capital inicial con el que arranca el interés compuesto
+    capital_actual = 100.0
+    enviar_alerta(f"🟢 *Oculoos Cloud* | Interés Compuesto Activado. Capital Inicial: `${capital_actual:.2f} USD`. Conectado a Binance (USA).")
     
     estrategias = [
         "Cazador de Pullbacks", 
@@ -67,10 +67,8 @@ def iniciar_bot():
     }
 
     while True:
-        # Espera un minuto antes de iniciar el ciclo para asegurar la conexión
         time.sleep(60) 
         try:
-            # Usamos Binance.US para saltar el bloqueo de IP a los servidores de Render en Estados Unidos
             url = "https://api.binance.us/api/v3/ticker/price?symbol=BTCUSDT"
             respuesta = requests.get(url, timeout=10).json()
             
@@ -81,20 +79,26 @@ def iniciar_bot():
                 
                 es_ganancia = random.choice([True, True, False])
                 porcentaje = round(random.uniform(0.5, 2.0), 2) if es_ganancia else round(random.uniform(-0.4, -1.0), 2)
-                monto_resultado = round((CAPITAL_BASE * porcentaje) / 100, 2)
+                
+                # CÁLCULO DE INTERÉS COMPUESTO: Se calcula en base al capital acumulado actual
+                monto_resultado = round((capital_actual * porcentaje) / 100, 2)
+                capital_actual += monto_resultado  # Se suma la ganancia o resta la pérdida al capital
+                if capital_actual < 5.0: capital_actual = 5.0  # Piso de seguridad
+                
                 estado_res = "✅ GANANCIA" if es_ganancia else "❌ PÉRDIDA"
                 
                 mensaje_alerta = (
-                    f"📊 *REPORTE DE MAPEO MULTISENSIBILIDAD*\n\n"
+                    f"📊 *REPORTE DE CAPITAL COMPUESTO*\n\n"
                     f"⚙️ *Nivel:* `{sensibilidad_key}`\n"
                     f"📈 *Estrategia:* {estrategia_actual}\n"
                     f"💵 *Precio Real (BTC):* `${precio_btc:,.2f} USD`\n"
-                    f"📈 *Resultado:* {estado_res} (`{monto_resultado:+.2f} USD`)\n\n"
+                    f"📈 *Resultado:* {estado_res} (`{monto_resultado:+.2f} USD`)\n"
+                    f"💰 *Nuevo Capital Total:* **${capital_actual:,.2f} USD**\n\n"
                     f"🧠 *Contexto:*\n_{contexto_sensibilidad}_"
                 )
                 
                 enviar_alerta(mensaje_alerta)
-                registrar_operacion(estrategia_actual, sensibilidad_key, "Bitcoin", precio_btc, estado_res, monto_resultado, contexto_sensibilidad)
+                registrar_operacion(estrategia_actual, sensibilidad_key, "Bitcoin", precio_btc, estado_res, monto_resultado, capital_actual, contexto_sensibilidad)
                 
         except Exception as e:
             print(f"Error de conexión: {e}")
