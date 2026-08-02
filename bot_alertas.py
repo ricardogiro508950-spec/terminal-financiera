@@ -21,7 +21,7 @@ ARCHIVO_CSV = "historial_senales_reales.csv"
 ARCHIVO_ESTADO = "ultimo_estado.json"
 
 ACTIVOS = {"Bitcoin": "BTC-USD", "Oro": "GC=F", "Petróleo": "CL=F"}
-ESTRATEGIAS = ["Confluencia Clásica", "Primera Vela (ORB)", "Cazador de Pullbacks"]
+ESTRATEGIAS = ["Confluencia Clásica", "Primera Vela (ORB)", "Cazador de Pullbacks", "Confluencia Gann + Fibonacci"]
 
 INTERVALO_CICLO_SEG = 900       # revisa cada 15 minutos (no cada 45 seg — evita saturar la API)
 UMBRAL_PULLBACK_PCT = 0.35
@@ -29,9 +29,10 @@ UMBRAL_PULLBACK_PCT = 0.35
 # Cada estrategia opera en una temporalidad distinta, así que cada una necesita
 # su propio tiempo de espera antes de evaluar si la señal acertó:
 HORAS_EVALUACION_POR_ESTRATEGIA = {
-    "Primera Vela (ORB)": 2,          # usa velas de 15 min -> se resuelve rápido
-    "Cazador de Pullbacks": 6,        # usa velas de 1 hora -> tiempo intermedio
-    "Confluencia Clásica": 72,        # usa velas de 1 día -> necesita varios días
+    "Primera Vela (ORB)": 2,                    # usa velas de 15 min -> se resuelve rápido
+    "Cazador de Pullbacks": 6,                  # usa velas de 1 hora -> tiempo intermedio
+    "Confluencia Clásica": 72,                  # usa velas de 1 día -> necesita varios días
+    "Confluencia Gann + Fibonacci": 72,         # también usa rango de velas diarias
 }
 
 # ==========================================
@@ -196,8 +197,54 @@ def analizar_orb(ticker):
         return None
 
 # ==========================================
-# REGISTRO Y ALERTA
+# ANÁLISIS 4: CONFLUENCIA GANN + FIBONACCI
 # ==========================================
+def analizar_gann_fibonacci(ticker):
+    """
+    Divide el rango de las últimas 50 velas diarias en niveles de Gann (0/0.5/1)
+    y Fibonacci (0/0.5/0.618/0.85/0.95/1). El nivel 0.5 coincide en ambos sistemas
+    (mayor peso según el material de referencia). La zona 85-95% de Fibonacci es
+    la otra zona de reversión que se marca en el documento.
+
+    NOTA HONESTA: no se detecta "Order Block" (mencionado en el material original)
+    porque no tiene una regla matemática precisa y verificable — en su lugar se usa
+    RSI en zona extrema como confirmación real.
+    """
+    df = obtener_historico(ticker, period="3mo", interval="1d")
+    if df is None or len(df) < 30:
+        return None
+
+    ventana = df.tail(50)
+    high = ventana["High"].max()
+    low = ventana["Low"].min()
+    rango = high - low
+    if rango <= 0:
+        return None
+
+    close = df["Close"].iloc[-1]
+    rsi = calculate_rsi(df["Close"]).iloc[-1]
+
+    nivel_05 = low + 0.5 * rango                 # Gann 0.5 = Fibonacci 0.5 (coinciden)
+    zona_fib_85 = low + 0.85 * rango
+    zona_fib_95 = low + 0.95 * rango
+
+    tolerancia = rango * 0.02  # 2% del rango como margen de "cerca del nivel"
+    cerca_del_medio = abs(close - nivel_05) <= tolerancia
+    en_zona_85_95 = zona_fib_85 <= close <= zona_fib_95 + tolerancia
+
+    if en_zona_85_95 and rsi > 70:
+        señal = "🔴 VENDER (zona de reversión 85-95% Fibonacci + RSI sobrecomprado)"
+    elif cerca_del_medio and rsi < 35:
+        señal = "🟢 COMPRAR (zona de interés 0.5 Gann/Fibonacci + RSI sobrevendido)"
+    else:
+        señal = "🟡 ESPERAR (sin confluencia clara en este momento)"
+
+    return {
+        "señal": señal, "precio": close, "rsi": rsi,
+        "ema50": nivel_05, "ema200": None,
+    }
+
+
 def registrar_señal(activo, estrategia, resultado):
     inicializar_csv()
     fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -292,9 +339,9 @@ def iniciar_bot():
 
     enviar_alerta(
         "🚀 *Oculoos Bot de Señales Reales — Iniciado*\n"
-        "Calcula las 3 estrategias con datos verdaderos de mercado (sin aleatoriedad).\n"
+        "Calcula 4 estrategias con datos verdaderos de mercado (sin aleatoriedad).\n"
         "Solo avisa cuando una señal CAMBIA. Cada estrategia se evalúa a su propio ritmo:\n"
-        "🌅 ORB: 2h | 🧲 Pullbacks: 6h | 📊 Confluencia Clásica: 72h (3 días)"
+        "🌅 ORB: 2h | 🧲 Pullbacks: 6h | 📊 Confluencia Clásica: 72h | 📐 Gann+Fibonacci: 72h"
     )
 
     while True:
@@ -303,6 +350,7 @@ def iniciar_bot():
                 "Confluencia Clásica": analizar_confluencia_clasica(ticker),
                 "Primera Vela (ORB)": analizar_orb(ticker),
                 "Cazador de Pullbacks": analizar_pullback(ticker),
+                "Confluencia Gann + Fibonacci": analizar_gann_fibonacci(ticker),
             }
 
             for estrategia, resultado in resultados_por_estrategia.items():
