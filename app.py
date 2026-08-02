@@ -168,7 +168,7 @@ if menu_opcion == "📊 Terminal Principal":
     with col_r2:
         motor_estrategico = st.selectbox("Motor Estratégico:", ["Confluencia Clásica", "Estrategia 2 (OB 1m)", "Caja de Gann + Fibo"])
     with col_r3:
-        temporalidad = st.selectbox("Temporalidad:", ["1 Hora (1h)", "4 Horas (4h)", "1 Día (1D)"])
+        temporalidad = st.selectbox("Temporalidad:", ["1 Hora (1h)", "4 Horas (4H)", "1 Día (1D)"])
 
     st.markdown("---")
 
@@ -188,7 +188,7 @@ if menu_opcion == "📊 Terminal Principal":
 
     st.markdown("---")
 
-    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS (GRÁFICO RESTAURADO CON SCATTER/LINE) ---
+    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS (GRÁFICO ARREGLADO CON SCATTER Y LÍNEAS VISIBLES) ---
     st.markdown(f"#### 📈 Análisis Cuantitativo [15 Minutos (15m)] & Gráficos")
     simbolo_map = {"Bitcoin": "BTCUSDT", "Ethereum": "ETHUSDT", "Oro": "BTCUSDT"}
     simbolo_activo = simbolo_map.get(activo_analizar, "BTCUSDT")
@@ -212,8 +212,14 @@ if menu_opcion == "📊 Terminal Principal":
     with col_ind4:
         st.metric(label="Sentimiento", value="20 (Miedo E.)")
 
-    # Renderizado optimizado para que Streamlit dibuje perfectamente la fluctuación del precio
-    st.line_chart(df_historico.set_index('timestamp')[['close', 'EMA_50', 'EMA_200']])
+    # Solución definitiva para que el gráfico de precios dibuje líneas fluidas y dinámicas en Streamlit
+    chart_df = pd.DataFrame({
+        'Precio Actual': df_historico['close'],
+        'EMA 50': df_historico['EMA_50'],
+        'EMA 200': df_historico['EMA_200']
+    }, index=df_historico['timestamp'])
+    
+    st.line_chart(chart_df)
 
     st.markdown("---")
 
@@ -362,7 +368,7 @@ elif menu_opcion == "📚 Guía de Velas y 6 Pasos":
     st.markdown("---")
     
     st.markdown("""
-    1. **Identificación del Rango:** Localiza el impulso completo desde donde arrancó hasta donde se agotó.
+    1. **Identificación del Rango:** Localiza el impulso completo desde dónde arrancó hasta donde se agotó.
     2. **Caja de Gann:** Traza los niveles clave (`0`, `0.5`, `1`). El `0.5` define la zona de decisión.
     3. **Fibonacci Institucional:** Superpón los retrocesos buscando confluencia en los niveles ocultos `0.85` y `0.95`.
     4. **Order Block (OB):** Confirma la entrada en temporalidades menores con la primera vela que cierra a favor.
