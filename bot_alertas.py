@@ -17,7 +17,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🟢 Motor Oculoos con Rendimiento por Estrategia Activo."
+    return "🟢 Motor Oculoos con Memoria de Capital Activo."
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -29,6 +29,21 @@ def inicializar_csv():
         with open(ARCHIVO_CSV, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow(["Fecha_Hora", "Estrategia", "Sensibilidad", "Activo", "Precio_Binance", "Resultado", "Impacto_USD", "Capital_Acumulado", "Rendimiento_Total_Pct", "Contexto"])
+
+def obtener_ultimo_capital():
+    """Lee el archivo CSV para recuperar el último capital acumulado y evitar que se reinicie a 100."""
+    if os.path.exists(ARCHIVO_CSV):
+        try:
+            with open(ARCHIVO_CSV, mode='r', encoding='utf-8') as f:
+                reader = list(csv.reader(f))
+                if len(reader) > 1:
+                    ultima_fila = reader[-1]
+                    # La columna de capital acumulado es la índice 7
+                    capital_previo = float(ultima_fila[7])
+                    return capital_previo
+        except Exception as e:
+            print(f"Error leyendo capital previo: {e}")
+    return 100.0  # Si no hay historial, arranca en 100 por defecto
 
 def enviar_alerta(mensaje):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -48,7 +63,8 @@ def registrar_operacion(estrategia, sensibilidad, activo, precio, resultado, mon
 
 def iniciar_bot():
     capital_inicial = 100.0
-    capital_actual = capital_inicial
+    # Recuperamos el capital anterior para que no se pierda al actualizar el código
+    capital_actual = obtener_ultimo_capital()
     
     estrategias = [
         "Cazador de Pullbacks", 
@@ -58,10 +74,9 @@ def iniciar_bot():
         "Confluencia VIP (S. Loaiza: Gann 0.5 + Fibo 0.85/0.95)"
     ]
     
-    # Diccionario para almacenar el acumulado de porcentaje de cada estrategia
     rendimiento_estrategias = {est: 0.0 for est in estrategias}
 
-    enviar_alerta(f"🟢 *Oculoos Cloud* | Monitoreo por Estrategia Activado. Capital Inicial: `${capital_actual:.2f} USD`.")
+    enviar_alerta(f"🟢 *Oculoos Cloud* | Memoria de Capital Activada. Capital Actual Recuperado: `⚡ ${capital_actual:,.2f} USD`.")
     
     niveles_sensibilidad = {
         "Sensibilidad 0 (Estándar/Base)": "Filtros estrictos y conservadores. Máxima exigencia matemática.",
@@ -88,18 +103,15 @@ def iniciar_bot():
                 capital_actual += monto_resultado  
                 if capital_actual < 5.0: capital_actual = 5.0  
 
-                # Acumulamos el porcentaje en la estrategia que acaba de salir
                 rendimiento_estrategias[estrategia_actual] += porcentaje_op
-
                 rendimiento_global_pct = ((capital_actual - capital_inicial) / capital_inicial) * 100
                 estado_res = "✅ GANANCIA" if es_ganancia else "❌ PÉRDIDA"
                 
-                # Construir la lista de estrategias y sus porcentajes actuales
+                # Bloque en cursiva para que visualmente parezca más pequeño y limpio
                 lista_estrategias_str = ""
                 for est, pct in rendimiento_estrategias.items():
-                    # Destacar la estrategia actual con una flecha
                     prefijo = "👉 " if est == estrategia_actual else "▪️ "
-                    lista_estrategias_str += f"{prefijo}*{est}*: `{pct:+.2f}%`\n"
+                    lista_estrategias_str += f"_{prefijo}{est}: {pct:+.2f}%_\n"
 
                 mensaje_alerta = (
                     f"📊 *REPORTE DE RENDIMIENTO & ESTRATEGIA*\n\n"
