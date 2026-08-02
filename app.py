@@ -92,16 +92,15 @@ def obtener_historico_binance(symbol="BTCUSDT", interval="15m", limit=100):
         df['volume'] = df['volume'].astype(float)
         return df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
     except Exception:
-        # Generador de respaldo con escala de precios correcta según el activo
         base_precios = {"BTCUSDT": 63000.0, "ETHUSDT": 3500.0, "PAXGUSDT": 4079.0}
         base = base_precios.get(symbol, 63000.0)
         fechas = pd.date_range(end=datetime.datetime.now(), periods=limit, freq='15min')
-        precios = base + np.random.randn(limit).cumsum() * (base * 0.001)
+        precios = base + np.random.randn(limit).cumsum() * (base * 0.002)
         df = pd.DataFrame({
             'timestamp': fechas,
-            'open': precios - (base * 0.0005),
-            'high': precios + (base * 0.001),
-            'low': precios - (base * 0.001),
+            'open': precios - (base * 0.001),
+            'high': precios + (base * 0.002),
+            'low': precios - (base * 0.002),
             'close': precios,
             'volume': np.random.rand(limit) * 1000
         })
@@ -190,18 +189,15 @@ if menu_opcion == "📊 Terminal Principal":
 
     st.markdown("---")
 
-    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS DINÁMICOS EN TIEMPO REAL ---
+    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS EN TIEMPO REAL (CORREGIDO PARA EVITAR LÍNEA PLANA) ---
     st.markdown(f"#### 📈 Análisis Cuantitativo [15 Minutos (15m)] & Gráficos en Tiempo Real")
     
-    # Mapeo correcto y dinámico de símbolos institucionales para cada activo seleccionado
     simbolo_map = {"Bitcoin": "BTCUSDT", "Ethereum": "ETHUSDT", "Oro": "PAXGUSDT"}
     simbolo_activo = simbolo_map.get(activo_analizar, "BTCUSDT")
 
-    # Obtención de datos frescos desde Binance según el activo seleccionado
     df_historico = obtener_historico_binance(simbolo_activo, interval="15m", limit=100)
     precio_actual_live = obtener_precio_binance(simbolo_activo)
     
-    # Inyección del precio en tiempo real en la última vela
     if not df_historico.empty:
         df_historico.loc[df_historico.index[-1], 'close'] = precio_actual_live
 
@@ -223,14 +219,13 @@ if menu_opcion == "📊 Terminal Principal":
     with col_ind4:
         st.metric(label="Precio Live", value=f"${precio_actual_live:,.2f}")
 
-    # DataFrame optimizado con índices de tiempo correctos para renderizado dinámico en Streamlit
+    # Forzamos un dataframe numérico limpio con nombres distintos y sin conflictos de índice para garantizar renderizado fluido en st.line_chart
     chart_data = pd.DataFrame({
-        f'Precio ({activo_analizar})': df_historico['close'],
-        'EMA 50': df_historico['EMA_50'],
-        'EMA 200': df_historico['EMA_200']
+        'Precio_Actual': df_historico['close'].values,
+        'EMA_50': df_historico['EMA_50'].values,
+        'EMA_200': df_historico['EMA_200'].values
     }, index=df_historico['timestamp'])
 
-    # Renderizado gráfico dinámico con auto-escala vertical perfecta
     st.line_chart(chart_data, use_container_width=True)
 
     st.markdown("---")
@@ -386,5 +381,4 @@ elif menu_opcion == "📚 Guía de Velas y 6 Pasos":
     4. **Order Block (OB):** Confirma la entrada en temporalidades menores con la primera vela que cierra a favor.
     5. **Gestión de Riesgo Estricta:** Limita la exposición al riesgo configurado y protege con Stop Loss.
     6. **Control Emocional:** Cierra el día al alcanzar tu límite de pérdida o objetivo de profit.
-    ```
     """)
