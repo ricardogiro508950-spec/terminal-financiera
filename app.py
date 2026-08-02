@@ -70,7 +70,7 @@ def obtener_precio_binance(symbol="BTCUSDT"):
         data = res.json()
         return float(data['price'])
     except Exception:
-        precios_base = {"BTCUSDT": 63152.54, "ETHUSDT": 3500.0, "XAUUSD": 4079.40}
+        precios_base = {"BTCUSDT": 63152.54, "ETHUSDT": 3500.0, "PAXGUSDT": 4079.40}
         return precios_base.get(symbol, 63152.54)
 
 @st.cache_data(ttl=30)
@@ -92,14 +92,16 @@ def obtener_historico_binance(symbol="BTCUSDT", interval="15m", limit=100):
         df['volume'] = df['volume'].astype(float)
         return df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
     except Exception:
+        # Generador de respaldo con escala de precios correcta según el activo
+        base_precios = {"BTCUSDT": 63000.0, "ETHUSDT": 3500.0, "PAXGUSDT": 4079.0}
+        base = base_precios.get(symbol, 63000.0)
         fechas = pd.date_range(end=datetime.datetime.now(), periods=limit, freq='15min')
-        base = 63000.0
-        precios = base + np.random.randn(limit).cumsum() * 50
+        precios = base + np.random.randn(limit).cumsum() * (base * 0.001)
         df = pd.DataFrame({
             'timestamp': fechas,
-            'open': precios - 20,
-            'high': precios + 60,
-            'low': precios - 60,
+            'open': precios - (base * 0.0005),
+            'high': precios + (base * 0.001),
+            'low': precios - (base * 0.001),
             'close': precios,
             'volume': np.random.rand(limit) * 1000
         })
@@ -188,16 +190,18 @@ if menu_opcion == "📊 Terminal Principal":
 
     st.markdown("---")
 
-    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS (TIEMPO REAL ABSOLUTO CON TRADINGVIEW / STREAMLIT CHARTS) ---
+    # --- ANÁLISIS CUANTITATIVO Y GRÁFICOS DINÁMICOS EN TIEMPO REAL ---
     st.markdown(f"#### 📈 Análisis Cuantitativo [15 Minutos (15m)] & Gráficos en Tiempo Real")
-    simbolo_map = {"Bitcoin": "BTCUSDT", "Ethereum": "ETHUSDT", "Oro": "BTCUSDT"}
+    
+    # Mapeo correcto y dinámico de símbolos institucionales para cada activo seleccionado
+    simbolo_map = {"Bitcoin": "BTCUSDT", "Ethereum": "ETHUSDT", "Oro": "PAXGUSDT"}
     simbolo_activo = simbolo_map.get(activo_analizar, "BTCUSDT")
 
-    # Obtención de datos frescos desde Binance
+    # Obtención de datos frescos desde Binance según el activo seleccionado
     df_historico = obtener_historico_binance(simbolo_activo, interval="15m", limit=100)
-    
-    # Inyección del precio en tiempo real más reciente en la última vela para garantizar actualización absoluta
     precio_actual_live = obtener_precio_binance(simbolo_activo)
+    
+    # Inyección del precio en tiempo real en la última vela
     if not df_historico.empty:
         df_historico.loc[df_historico.index[-1], 'close'] = precio_actual_live
 
@@ -219,14 +223,14 @@ if menu_opcion == "📊 Terminal Principal":
     with col_ind4:
         st.metric(label="Precio Live", value=f"${precio_actual_live:,.2f}")
 
-    # Gráfico interactivo optimizado para renderizar las velas/líneas en tiempo real con plotly integrado en Streamlit o st.altair_chart / st.line_chart robusto
+    # DataFrame optimizado con índices de tiempo correctos para renderizado dinámico en Streamlit
     chart_data = pd.DataFrame({
-        'Precio en Vivo': df_historico['close'],
+        f'Precio ({activo_analizar})': df_historico['close'],
         'EMA 50': df_historico['EMA_50'],
         'EMA 200': df_historico['EMA_200']
     }, index=df_historico['timestamp'])
 
-    # Renderizado interactivo nativo avanzado de alta fluidez
+    # Renderizado gráfico dinámico con auto-escala vertical perfecta
     st.line_chart(chart_data, use_container_width=True)
 
     st.markdown("---")
@@ -382,4 +386,5 @@ elif menu_opcion == "📚 Guía de Velas y 6 Pasos":
     4. **Order Block (OB):** Confirma la entrada en temporalidades menores con la primera vela que cierra a favor.
     5. **Gestión de Riesgo Estricta:** Limita la exposición al riesgo configurado y protege con Stop Loss.
     6. **Control Emocional:** Cierra el día al alcanzar tu límite de pérdida o objetivo de profit.
+    ```
     """)
