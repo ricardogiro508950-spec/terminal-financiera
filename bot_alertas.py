@@ -95,7 +95,6 @@ def calcular_resultado(version, activo, precio_entrada, precio_salida, señal, p
     
     # --- LÓGICA DE MARTINGALA (Solo para V4) ---
     if "Martingala" in version:
-        # Si perdimos antes, duplicamos el riesgo. Si ganamos, volvemos a 1R.
         if perdidas_consecutivas > 0:
             multiplicador_riesgo = min(2 ** perdidas_consecutivas, 5) # Máximo 5x para no quemar
         else:
@@ -124,10 +123,21 @@ def calcular_resultado(version, activo, precio_entrada, precio_salida, señal, p
     return ganancia_usd, r_multiplo, nuevo_balance
 
 # ==========================================
-# MOTOR DE ANÁLISIS CON SENSIBILIDADES Y FILTROS
+# MOTOR DE ANÁLISIS CON SENSIBILIDADES (CORREGIDO)
 # ==========================================
 def analizar_mercado_con_sensibilidad(ticker, version):
-    # 1. BASE COMÚN (Gann + Fib)
+    # --- 1. DETECCIÓN DE PRUEBAS (V8) ---
+    # Si es V8, la activamos a la fuerza sin revisar NADA. 
+    # Esto garantiza que veas operaciones en tu Telegram YA.
+    if "Pruebas" in version:
+        df_hour = yf.Ticker(ticker).history(period="1mo", interval="1h")
+        if df_hour is None or len(df_hour) < 1: return None, None
+        
+        # Cogemos el cierre de la última vela real
+        close = df_hour["Close"].iloc[-1]
+        return close, True  # Retorna el precio y "Confluencia = True" a la fuerza.
+
+    # --- 2. LÓGICA NORMAL PARA EL RESTO DE ESTRATEGIAS (V1 a V5) ---
     df_daily = yf.Ticker(ticker).history(period="3mo", interval="1d")
     if df_daily is None or len(df_daily) < 20: return None, None
     
@@ -139,28 +149,21 @@ def analizar_mercado_con_sensibilidad(ticker, version):
     gann_50 = low + 0.5 * rango
     fib_95 = low + 0.95 * rango
     
-    if "Pruebas" in version:
-        tolerancia = rango * 0.20
-    else:
-        tolerancia = rango * 0.02
-    
+    tolerancia = rango * 0.02
     confluencia = abs(close - gann_50) <= tolerancia and abs(close - fib_95) <= tolerancia
-    if not confluencia and "Pruebas" not in version: return None, None
+    
+    if not confluencia: return None, None
 
-    # 2. FILTRO DE VOLUMEN MUERTO (Para todas menos V1, V3 y V8)
+    # --- 3. FILTRO DE VOLUMEN MUERTO ---
     if "V2" in version or "V4" in version or "V5" in version:
         df_hour = yf.Ticker(ticker).history(period="1mo", interval="1h")
         if df_hour is None or len(df_hour) < 20: return None, None
-        
         vol_promedio_24h = df_hour['Volume'].tail(24).mean()
         vol_actual = df_hour['Volume'].iloc[-1]
-        
-        # Si el volumen actual es menor al 50% del promedio, es mercado muerto
-        if vol_actual < (vol_promedio_24h * 0.5):
-            return None, None # No operamos en mercado muerto
+        if vol_actual < (vol_promedio_24h * 0.5): return None, None
 
-    # 3. ANÁLISIS DE VELAS (Solo para V2, V4, V5 y V8)
-    if "V2" in version or "V4" in version or "V5" in version or "Pruebas" in version:
+    # --- 4. ANÁLISIS DE VELAS ---
+    if "V2" in version or "V4" in version or "V5" in version:
         df_hour = yf.Ticker(ticker).history(period="1mo", interval="1h")
         if df_hour is None or len(df_hour) < 3: return None, None
         
@@ -174,7 +177,7 @@ def analizar_mercado_con_sensibilidad(ticker, version):
         
         if "Ultra-Conservadora" in version:
             condicion_vela = (mecha_inf3 >= (3 * cuerpo3) and mecha_sup3 < (0.1 * cuerpo3)) or (v2['Close'] < v2['Open'] and v3['Close'] > v3['Open'] and v3['Close'] > v2['Open'] * 1.05)
-        elif "Agresiva" in version or "Pruebas" in version:
+        elif "Agresiva" in version:
             condicion_vela = v3['Close'] > v3['Open']
         else:
             condicion_vela = (mecha_inf3 >= (2 * cuerpo3) and mecha_sup3 < (0.2 * cuerpo3)) or (v2['Close'] < v2['Open'] and v3['Close'] > v3['Open'] and v3['Open'] < v2['Close'] and v3['Close'] > v2['Open'])
