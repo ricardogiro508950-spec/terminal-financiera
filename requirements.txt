@@ -6,3 +6,4 @@ yfinance
 gspread
 oauth2client
 requests
+Flask
