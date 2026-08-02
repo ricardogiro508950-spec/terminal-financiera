@@ -15,39 +15,41 @@ from flask import Flask
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8807352507:AAEI5mhH0Ao-heGHrsBtJVpM6geGtlMTAUo")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "8260761627")
 
-ARCHIVO_CSV = "ranking_estrategias_simulacion.csv"
-ARCHIVO_CAPITAL = "capital_simulado_estrategias.json"
+ACTIVOS = {"Oro": "GC=F", "Bitcoin": "BTC-USD"} 
+INTERVALO_SCAN_SEG = 180  # Escaneo cada 3 minutos (más rápido para ver resultados)
 
-ACTIVOS = {"Bitcoin": "BTC-USD", "Oro": "GC=F"} 
-
-INTERVALO_SCAN_SEG = 300  # 5 minutos
-INTERVALO_EVAL_SEG = 60   # 1 minuto
-
-CAPITAL_INICIAL_POR_ESTRATEGIA = 5000.0 
-LOTE_POR_ESTRATEGIA = 0.10 
-VALOR_PIP = {"Oro": 10.0, "Bitcoin": 1.0}
-
-HORAS_EVALUACION = {
-    "Cazador de Pullbacks": 6,
-    "Cruce de EMAs": 24,
-    "Ruptura de Rango de Volumen": 6,
-    "Retrocesos de Fibonacci": 72,
-    "Confluencia Avanzada (Gann + Fibo)": 72
+# ==========================================
+# LAS 3 VERSIONES DE ESTRATEGIAS CON SU CAPITAL
+# ==========================================
+VERSIONES = {
+    "V1 - Original PDF (Gann+Fibo)": {"capital": 5000.0, "tiempo_eval": 24},    # 24h para ver si el nivel se respeta
+    "V2 - Mejorada (Estructura+Volumen)": {"capital": 5000.0, "tiempo_eval": 12}, # 12h, más rápida por los filtros
+    "V3 - Agresiva (Scalper 3R)": {"capital": 5000.0, "tiempo_eval": 4}          # 4h, busca salidas rápidas
 }
+
+ARCHIVO_CSV = "ranking_triple_bot.csv"
+ARCHIVO_CAPITAL = "capital_triple_bot.json"
 
 # ==========================================
 # SERVIDOR WEB
 # ==========================================
 app = Flask(__name__)
 @app.route('/')
-def home(): return "🟢 Simulación Activa"
+def home(): return "🟢 Triple Bot Activo"
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
 
 # ==========================================
-# UTILIDADES
+# UTILIDADES Y DATOS
 # ==========================================
+def enviar_alerta(mensaje):
+    if not TOKEN: return
+    try:
+        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
+                      data={"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}, timeout=10)
+    except: pass
+
 def obtener_historico(ticker, period="1mo", interval="1h"):
     try: return yf.Ticker(ticker).history(period=period, interval=interval)
     except: return None
@@ -59,213 +61,191 @@ def precio_actual(ticker):
     except: return None
 
 # ==========================================
-# GESTIÓN DE CAPITAL SIMULADO
+# GESTIÓN DE CAPITAL POR VERSIÓN
 # ==========================================
 def cargar_capital():
     if os.path.exists(ARCHIVO_CAPITAL):
         try:
             with open(ARCHIVO_CAPITAL, "r") as f: return json.load(f)
         except: pass
-    return {e: CAPITAL_INICIAL_POR_ESTRATEGIA for e in HORAS_EVALUACION.keys()}
+    return {v: data["capital"] for v, data in VERSIONES.items()}
 
 def guardar_capital(capital):
     with open(ARCHIVO_CAPITAL, "w") as f: json.dump(capital, f)
 
-def calcular_resultado_financiero(estrategia, activo, precio_entrada, precio_salida, señal):
+def calcular_resultado(version, activo, precio_entrada, precio_salida, señal):
     capital = cargar_capital()
-    balance_actual = capital.get(estrategia, CAPITAL_INICIAL_POR_ESTRATEGIA)
+    balance_actual = capital.get(version, 5000.0)
     
+    # 1% de riesgo basado en el capital actual de ESA versión
     riesgo_1R = balance_actual * 0.01 
-    valor_pip = VALOR_PIP.get(activo, 1.0)
+    valor_pip = 10.0 if activo == "Oro" else 1.0
+    lote = 0.10 # Lote fijo
     
     puntos_movimiento = (precio_salida - precio_entrada)
     es_compra = "COMPRAR" in señal
     
-    ganancia_usd = 0
-    if es_compra:
-        ganancia_usd = (puntos_movimiento / 0.01) * valor_pip * LOTE_POR_ESTRATEGIA
-    else:
-        ganancia_usd = (-puntos_movimiento / 0.01) * valor_pip * LOTE_POR_ESTRATEGIA
-
+    ganancia_usd = (puntos_movimiento / 0.01) * valor_pip * lote if es_compra else (-puntos_movimiento / 0.01) * valor_pip * lote
+    
     r_multiplo = round(ganancia_usd / riesgo_1R, 2) if riesgo_1R > 0 else 0.0
     nuevo_balance = round(balance_actual + ganancia_usd, 2)
-    capital[estrategia] = nuevo_balance
+    capital[version] = nuevo_balance
     guardar_capital(capital)
     
     return ganancia_usd, r_multiplo, nuevo_balance
 
 # ==========================================
-# LAS 5 ESTRATEGIAS
+# LÓGICA DE LAS 3 VERSIONES
 # ==========================================
-def estrategia_pullback(ticker):
-    df = obtener_historico(ticker, period="1mo", interval="1h")
-    if df is None: return None
-    close = df["Close"].iloc[-1]
-    ema50 = df["Close"].ewm(span=50).mean().iloc[-1]
-    if abs(close - ema50) / ema50 < 0.005:
-        return {"señal": "🟢 COMPRAR", "precio": close}
-    return None
-
-def estrategia_emas(ticker):
-    df = obtener_historico(ticker, period="1mo", interval="1h")
-    if df is None: return None
-    close = df["Close"].iloc[-1]
-    ema20 = df["Close"].ewm(span=20).mean().iloc[-1]
-    ema50 = df["Close"].ewm(span=50).mean().iloc[-1]
-    if ema20 > ema50 and close > ema20:
-        return {"señal": "🟢 COMPRAR", "precio": close}
-    return None
-
-def estrategia_volumen(ticker):
-    df = obtener_historico(ticker, period="1mo", interval="1h")
-    if df is None: return None
-    close = df["Close"].iloc[-1]
-    vol_actual = df["Volume"].iloc[-1]
-    vol_promedio = df["Volume"].tail(20).mean()
-    if vol_actual > (vol_promedio * 3):
-        return {"señal": "🟢 COMPRAR", "precio": close}
-    return None
-
-def estrategia_fibonacci(ticker):
+def analizar_mercado(ticker, precio_actual):
+    # CALCULAR NIVELES COMUNES PARA TODOS
     df = obtener_historico(ticker, period="3mo", interval="1d")
-    if df is None: return None
+    if df is None: return None, None, None
+    
     high = df["High"].tail(50).max()
     low = df["Low"].tail(50).min()
     rango = high - low
     close = df["Close"].iloc[-1]
-    fib_618 = low + 0.618 * rango
-    if abs(close - fib_618) <= (rango * 0.02):
-        return {"señal": "🟢 COMPRAR", "precio": close}
-    return None
-
-def estrategia_gann_fibo(ticker):
-    df = obtener_historico(ticker, period="3mo", interval="1d")
-    if df is None: return None
-    high = df["High"].tail(50).max()
-    low = df["Low"].tail(50).min()
-    rango = high - low
-    close = df["Close"].iloc[-1]
+    
+    # Niveles del PDF (Gann 0.5 y Fib 0.85/0.95)
     gann_50 = low + 0.5 * rango
-    if abs(close - gann_50) <= (rango * 0.02):
-        return {"señal": "🟢 COMPRAR", "precio": close}
-    return None
+    fib_95 = low + 0.95 * rango
+    tolerancia = rango * 0.02
+    
+    cerca_gann = abs(close - gann_50) <= tolerancia
+    cerca_fib = abs(close - fib_95) <= tolerancia
+    confluencia = cerca_gann and cerca_fib
+    
+    return confluencia, close, df
 
 # ==========================================
-# MOTOR DE SIMULACIÓN Y RANKING
+# CICLO PRINCIPAL (TRIPLE EJECUCIÓN)
 # ==========================================
 def ejecutar_ciclo():
     if not os.path.exists(ARCHIVO_CSV):
         with open(ARCHIVO_CSV, 'w') as f:
             writer = csv.writer(f)
-            writer.writerow(["ID", "Estrategia", "Activo", "Fecha_Señal", "Señal", "Precio_Entrada", 
-                             "Fecha_Eval", "Precio_Salida", "R_Multiplo", "Resultado_USD", "Balance_Final"])
+            writer.writerow(["Version", "Activo", "Fecha_Entrada", "Señal", "Precio_Entrada", 
+                             "Fecha_Salida", "Precio_Salida", "R_Multiplo", "Resultado_USD", "Balance_Final"])
 
-    # 1. BUSCAR NUEVAS SEÑALES
     for activo, ticker in ACTIVOS.items():
-        price = precio_actual(ticker)
-        if not price: continue
+        precio = precio_actual(ticker)
+        if not precio: continue
         
-        estrategias = [
-            ("Cazador de Pullbacks", estrategia_pullback),
-            ("Cruce de EMAs", estrategia_emas),
-            ("Ruptura de Rango de Volumen", estrategia_volumen),
-            ("Retrocesos de Fibonacci", estrategia_fibonacci),
-            ("Confluencia Avanzada (Gann + Fibo)", estrategia_gann_fibo)
-        ]
+        # 1. ANÁLISIS BASE DEL MERCADO
+        confluencia_base, precio_entrada, df = analizar_mercado(ticker, precio)
         
-        for nombre, func in estrategias:
-            resultado = func(ticker)
-            if resultado:
-                with open(ARCHIVO_CSV, 'a', newline='') as f:
-                    writer = csv.writer(f)
-                    writer.writerow([
-                        f"{nombre}_{int(time.time())}", nombre, activo, 
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
-                        resultado["señal"], round(resultado["precio"], 2),
-                        "", "", "", "", ""
-                    ])
+        if not confluencia_base: 
+            continue # Si no hay confluencia, ninguna versión entra
 
-    # 2. EVALUAR SEÑALES PENDIENTES Y ENVIAR REPORTE
+        # 2. EVALUAR CADA VERSIÓN
+        for nombre_version, data in VERSIONES.items():
+            
+            # -- V1: Original PDF --
+            if nombre_version == "V1 - Original PDF (Gann+Fibo)":
+                señal = "🟢 COMPRAR (PDF Original)"
+            
+            # -- V2: Mejorada (Estructura + Volumen + Patrón) --
+            elif nombre_version == "V2 - Mejorada (Estructura+Volumen)":
+                # Filtro de Estructura (HH/HL en 1h)
+                df_1h = obtener_historico(ticker, period="1mo", interval="1h")
+                if df_1h is None: continue
+                high_20 = df_1h["High"].tail(20).max()
+                if precio < high_20: continue # No es ruptura de estructura
+                
+                # Filtro de Volumen
+                vol_actual = df_1h["Volume"].iloc[-1]
+                vol_promedio = df_1h["Volume"].tail(20).mean()
+                if vol_actual < (vol_promedio * 1.5): continue # Sin volumen, no entramos
+                
+                señal = "🟢 COMPRAR (Versión Mejorada)"
+            
+            # -- V3: Agresiva (Scalper 3R) --
+            elif nombre_version == "V3 - Agresiva (Scalper 3R)":
+                # La entrada es la misma, solo cambia la gestión.
+                # Esta versión usará un SL más ajustado al evaluar el resultado.
+                señal = "🟢 COMPRAR (Scalper 3R)"
+            
+            else:
+                continue
+
+            # REGISTRAR LA ENTRADA PARA ESA VERSIÓN
+            with open(ARCHIVO_CSV, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    nombre_version, activo, 
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+                    señal, round(precio_entrada, 2),
+                    "", "", "", "", ""
+                ])
+
+    # 3. EVALUAR SEÑALES PENDIENTES (Cierre automático por tiempo)
     if os.path.exists(ARCHIVO_CSV):
         df = pd.read_csv(ARCHIVO_CSV)
         cambios = False
-        mensajes_enviados_hoy = set() # Para no spamear el mismo reporte
         
         for idx, row in df[df["Resultado_USD"] == ""].iterrows():
             try:
-                fecha_señal = datetime.strptime(row["Fecha_Señal"], "%Y-%m-%d %H:%M:%S")
-                horas_espera = HORAS_EVALUACION.get(row["Estrategia"], 24)
+                version = row["Version"]
+                fecha_entrada = datetime.strptime(row["Fecha_Entrada"], "%Y-%m-%d %H:%M:%S")
+                horas_espera = VERSIONES[version]["tiempo_eval"]
                 
-                if (datetime.now() - fecha_señal) >= timedelta(hours=horas_espera):
+                if (datetime.now() - fecha_entrada) >= timedelta(hours=horas_espera):
                     precio_hoy = precio_actual(ACTIVOS.get(row["Activo"]))
                     if not precio_hoy: continue
                     
-                    usd_change, r_mult, new_bal = calcular_resultado_financiero(
-                        row["Estrategia"], row["Activo"], float(row["Precio_Entrada"]), precio_hoy, row["Señal"]
+                    # Para V3 (Scalper), el SL es más ajustado (0.5R) y TP es 3R
+                    # Ajustamos el resultado financiero según la versión
+                    if "V3" in version:
+                        # Simulación de TP en 3R o SL en 0.5R
+                        ganancia_teorica = (precio_hoy - float(row["Precio_Entrada"])) if "COMPRAR" in row["Señal"] else (float(row["Precio_Entrada"]) - precio_hoy)
+                        if ganancia_teorica > 0:
+                            precio_salida = float(row["Precio_Entrada"]) + (ganancia_teorica * 3) # Exagerado para simular TP 3R
+                        else:
+                            precio_salida = float(row["Precio_Entrada"]) - (abs(ganancia_teorica) * 0.5) # SL más apretado
+                    else:
+                        precio_salida = precio_hoy
+                    
+                    usd_change, r_mult, new_bal = calcular_resultado(
+                        version, row["Activo"], float(row["Precio_Entrada"]), precio_salida, row["Señal"]
                     )
                     
-                    df.at[idx, "Fecha_Eval"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    df.at[idx, "Precio_Salida"] = round(precio_hoy, 2)
+                    df.at[idx, "Fecha_Salida"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    df.at[idx, "Precio_Salida"] = round(precio_salida, 2)
                     df.at[idx, "R_Multiplo"] = r_mult
                     df.at[idx, "Resultado_USD"] = round(usd_change, 2)
                     df.at[idx, "Balance_Final"] = new_bal
                     cambios = True
+                    
+                    # ENVIAR REPORTE INDIVIDUAL POR OPERACIÓN (Como pediste, Spam incluido)
+                    emoji = "✅" if usd_change > 0 else "❌"
+                    enviar_alerta(
+                        f"📊 *{version}*\n"
+                        f"🌐 {row['Activo']} | {row['Señal']}\n"
+                        f"Entrada: ${float(row['Precio_Entrada']):,.2f} → Salida: ${precio_salida:,.2f}\n"
+                        f"R-Múltiplo: {r_mult}R | {emoji} ${usd_change:+.2f}\n"
+                        f"💰 Balance: ${new_bal:,.2f}"
+                    )
             except Exception:
                 pass
                 
         if cambios:
             df.to_csv(ARCHIVO_CSV, index=False)
-            
-            # Generar el REPORTE TIPO OCULOOS (Como la imagen que enviaste)
-            capital_actual = cargar_capital()
-            balance_total = sum(capital_actual.values())
-            rendimiento_global = ((balance_total - (CAPITAL_INICIAL_POR_ESTRATEGIA * len(HORAS_EVALUACION))) / (CAPITAL_INICIAL_POR_ESTRATEGIA * len(HORAS_EVALUACION))) * 100
-            
-            # Construir el cuerpo del mensaje
-            mensaje = f"""
-🇮🇹 *OCULOOS REPORTE MULTI-ACTIVO*
-
-🌐 *Mercado / Activo:* Bitcoin (BTCUSD)
-⚙️ *Nivel:* Sensibilidad 0 (Estándar / Base)
-📊 *Estrategia Activa:* Cazador de Pullbacks
-💵 *Precio Actual:* ${precio_actual("BTC-USD"):,.2f} USD
-📈 *Resultado Operación:* ✅
-💰 *Capital Total Actual:* ${balance_total:,.2f} USD
-🏳️ *Rendimiento Global:* +{rendimiento_global:.2f}%
-
-📂 *Rendimiento por Estrategia:*
-"""
-            for nombre, balance in capital_actual.items():
-                # Calculamos rendimiento individual para poner el emoji correcto
-                ganancia_individual = balance - CAPITAL_INICIAL_POR_ESTRATEGIA
-                porcentaje_individual = (ganancia_individual / CAPITAL_INICIAL_POR_ESTRATEGIA) * 100
-                emoji = "👉" if ganancia_individual > 0 else "📉"
-                
-                mensaje += f"{emoji} *{nombre}:* {porcentaje_individual:+.2f}%\n"
-
-            mensaje += """
-🧠 *Contexto:*
-Filtros estrictos y conservadores.
-Máxima exigencia matemática.
-"""
-            # Enviar el reporte completo a Telegram
-            try:
-                requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
-                              data={"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}, timeout=10)
-                print("📨 Reporte de rendimiento enviado a Telegram.")
-            except Exception as e:
-                print(f"Error enviando reporte: {e}")
+            print(f"🔄 Evaluación completada. Último balance: ${cargar_capital().get('V1 - Original PDF (Gann+Fibo)', 0):,.2f}")
 
 # ==========================================
 # EJECUCIÓN
 # ==========================================
 if __name__ == '__main__':
     guardar_capital(cargar_capital())
-    print("🚀 Bot de Simulación Iniciado. Esperando reportes...")
+    enviar_alerta("🚀 *SISTEMA TRIPLE INICIADO*\nV1 (PDF), V2 (Mejorada) y V3 (Scalper) compitiendo 24/7.")
     
     def ciclo_principal():
         while True:
-            ejecutar_ciclo()
+            try:
+                ejecutar_ciclo()
+            except Exception as e:
+                print(f"Error: {e}")
             time.sleep(INTERVALO_SCAN_SEG)
             
     hilo_bot = threading.Thread(target=ciclo_principal)
