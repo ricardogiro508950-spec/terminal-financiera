@@ -99,7 +99,9 @@ def enviar_alerta(mensaje):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     datos = {"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
-        requests.post(url, data=datos, timeout=10)
+        # AQUÍ ESTÁ EL CAMBIO: Imprimirá la respuesta exacta de Telegram
+        r = requests.post(url, data=datos, timeout=10)
+        print(f"Respuesta de Telegram: {r.text}")
     except Exception as e:
         print(f"Error enviando alerta: {e}")
 
@@ -330,14 +332,11 @@ def ciclo_principal():
 # EJECUCIÓN
 # ==========================================
 if __name__ == "__main__":
-    # 1. Iniciar servidor web para que no se apague
     t = threading.Thread(target=mantener_vivo)
     t.daemon = True
     t.start()
 
-    # 2. ENVIAR MENSAJE DE PRUEBA A TELEGRAM
-    time.sleep(3) # Espera 3 segundos para asegurar que todo cargue
+    time.sleep(3) 
     enviar_alerta("✅ *PRUEBA DE CONEXIÓN:* El bot se ha reiniciado correctamente, está conectado a Telegram y vigilando el mercado. 🚀")
 
-    # 3. Iniciar el escaneo de mercado
     ciclo_principal()
