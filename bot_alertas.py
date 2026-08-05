@@ -12,10 +12,10 @@ from datetime import datetime
 # CONFIGURACIÓN DEL SIMULADOR DE DINERO
 # ==========================================
 ARCHIVO_ESTADO = "simulador.json"
-SALDO_INICIAL = 50.0  # <--- CAMBIA ESTO SI ACTUALIZAS EL CÓDIGO Y LLEVABAS OTRO MONTO
-PAYOUT_BINOMO = 0.82  # En Binomo pagan aprox 82% por operación ganada
-INVERTIR_TODO_EL_SALDO = False # Ponlo en True si quieres arriesgar el 100% cada vez (All-In)
-MONTO_FIJO = 10.0 # Solo se usa si el de arriba está en False
+SALDO_INICIAL = 58.20  # <--- Actualizado a tu saldo actual tras la victoria
+PAYOUT_BINOMO = 0.82  
+MONTO_FIJO = 10.0 
+ESTRATEGIA_ANTI_MARTINGALA = True # <--- Tu nueva regla: $10 + Ganancia anterior
 
 # ==========================================
 # CONFIGURACIÓN DE TELEGRAM Y ACTIVOS
@@ -35,7 +35,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🟢 Motor Gann-Fibonacci + Simulador 24/7."
+    return "🟢 Motor Gann-Fibonacci + Simulador Anti-Martingala 24/7."
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -52,16 +52,20 @@ def enviar_alerta(mensaje):
         print(f"Error Telegram: {e}")
 
 # ==========================================
-# GESTOR DE LA CUENTA (BILLETERA VIRTUAL)
+# GESTOR DE LA CUENTA Y RACHAS
 # ==========================================
 def cargar_estado():
     if os.path.exists(ARCHIVO_ESTADO):
         try:
             with open(ARCHIVO_ESTADO, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Aseguramos que tenga la variable de racha si es un archivo viejo
+                if 'ultima_ganancia' not in data:
+                    data['ultima_ganancia'] = 0.0
+                return data
         except:
             pass
-    return {"saldo": SALDO_INICIAL, "pendientes": []}
+    return {"saldo": SALDO_INICIAL, "pendientes": [], "ultima_ganancia": 0.0}
 
 def guardar_estado(estado):
     with open(ARCHIVO_ESTADO, 'w') as f:
@@ -141,10 +145,10 @@ def ciclo_principal():
         try:
             estado = cargar_estado()
             print("\n" + "="*50)
-            print(f"🔄 INICIANDO ESCANEO (SALDO ACTUAL: ${estado['saldo']:.2f})")
+            print(f"🔄 ESCANEANDO (SALDO: ${estado['saldo']:.2f} | RACHA: +${estado['ultima_ganancia']:.2f})")
             print("="*50)
             
-            # 1. EVALUAR OPERACIONES PENDIENTES (Cerrando trades de hace 5 min)
+            # 1. EVALUAR OPERACIONES PENDIENTES
             if estado['pendientes']:
                 nuevos_pendientes = []
                 for op in estado['pendientes']:
@@ -154,13 +158,10 @@ def ciclo_principal():
                             nuevos_pendientes.append(op)
                             continue
                         
-                        # El precio en vivo en este exacto momento
                         precio_salida = df.iloc[-1]['Close'] 
-                        
                         ganada = False
                         empate = False
                         
-                        # Verificar victoria
                         if "COMPRA" in op['accion']:
                             if precio_salida > op['precio_entrada']: ganada = True
                             elif precio_salida == op['precio_entrada']: empate = True
@@ -168,28 +169,41 @@ def ciclo_principal():
                             if precio_salida < op['precio_entrada']: ganada = True
                             elif precio_salida == op['precio_entrada']: empate = True
                             
-                        # Actualizar Billetera
+                        # Actualizar Billetera y Memoria de Racha
                         if ganada:
-                            # Te devuelven tu inversión + la ganancia del 82%
-                            retorno = op['inversion'] + (op['inversion'] * PAYOUT_BINOMO)
-                            estado['saldo'] += retorno
+                            ganancia_neta = op['inversion'] * PAYOUT_BINOMO
+                            estado['saldo'] += op['inversion'] + ganancia_neta
+                            
+                            # Tu regla: guardar la ganancia para la próxima jugada
+                            if ESTRATEGIA_ANTI_MARTINGALA:
+                                estado['ultima_ganancia'] = ganancia_neta
+                            else:
+                                estado['ultima_ganancia'] = 0.0
+                                
                             res_txt = "✅ GANADA"
+                            racha_txt = f"📈 ¡Racha activa! Próxima inversión incluirá +${estado['ultima_ganancia']:.2f}"
+                            
                         elif empate:
-                            estado['saldo'] += op['inversion'] # Te devuelven el dinero
+                            estado['saldo'] += op['inversion'] 
+                            estado['ultima_ganancia'] = 0.0 # Se corta la racha
                             res_txt = "➖ EMPATE (Reembolso)"
+                            racha_txt = "Reinicio a $10.00"
+                            
                         else:
-                            # Si se pierde, no se suma nada porque ya se descontó al entrar
+                            estado['ultima_ganancia'] = 0.0 # Pierde la ganancia, vuelve a $10
                             res_txt = "❌ PERDIDA"
+                            racha_txt = "Reinicio a $10.00"
                             
                         msj_sim = (
-                            f"🧾 *TICKET DE SIMULACIÓN (Cierre a 5 min)*\n\n"
+                            f"🧾 *TICKET DE CIERRE (5 min)*\n\n"
                             f"🌐 *Activo:* {op['nombre']}\n"
                             f"⚖️ *Operación:* {op['accion']}\n"
                             f"💵 *Entrada:* ${op['precio_entrada']:,.4f}\n"
                             f"🏁 *Salida:* ${precio_salida:,.4f}\n"
                             f"🎯 *Resultado:* {res_txt}\n\n"
                             f"💰 *Inversión:* ${op['inversion']:.2f}\n"
-                            f"🏦 *NUEVO SALDO TOTAL: ${estado['saldo']:.2f}*"
+                            f"🏦 *NUEVO SALDO TOTAL: ${estado['saldo']:.2f}*\n"
+                            f"_{racha_txt}_"
                         )
                         enviar_alerta(msj_sim)
                         
@@ -206,22 +220,19 @@ def ciclo_principal():
                     resultado = analizar_mercado(nombre, ticker)
                     
                     if resultado:
-                        # Calcular cuánto invertir según configuración
-                        if INVERTIR_TODO_EL_SALDO:
-                            inversion = estado['saldo']
-                        else:
-                            inversion = MONTO_FIJO
-                            if inversion > estado['saldo']:
-                                inversion = estado['saldo']
+                        # Cálculo de Anti-Martingala: Base + Ganancia anterior
+                        inversion_calculada = MONTO_FIJO + estado.get('ultima_ganancia', 0.0)
+                        
+                        if inversion_calculada > estado['saldo']:
+                            inversion_calculada = estado['saldo']
                                 
-                        # Cobrar el dinero de la cuenta y registrar el trade
-                        estado['saldo'] -= inversion
+                        estado['saldo'] -= inversion_calculada
                         estado['pendientes'].append({
                             "nombre": nombre,
                             "ticker": ticker,
                             "accion": resultado['señal'],
                             "precio_entrada": resultado['precio'],
-                            "inversion": inversion
+                            "inversion": inversion_calculada
                         })
                         guardar_estado(estado)
                         
@@ -231,14 +242,14 @@ def ciclo_principal():
                             f"📊 *Acción:* {resultado['señal']}\n"
                             f"💵 *Precio Actual:* ${resultado['precio']:,.4f}\n"
                             f"📐 *Zona Fibo:* ${resultado['fibo_85']:,.4f} - ${resultado['fibo_95']:,.4f}\n\n"
-                            f"🤖 *SIMULADOR AUTOMÁTICO:*\n"
-                            f"Se ha invertido automáticamente ${inversion:.2f} de tu cuenta virtual. El saldo temporal es ${estado['saldo']:.2f}. Te enviaré el ticket de resultado en 5 minutos."
+                            f"🤖 *SIMULADOR ANTI-MARTINGALA:*\n"
+                            f"Invirtiendo ${inversion_calculada:.2f} (Base + Racha). Saldo restante en caja: ${estado['saldo']:.2f}."
                         )
                         enviar_alerta(msj)
             else:
-                print("⚠️ SALDO AGOTADO. El simulador está en quiebra. Modifica SALDO_INICIAL en el código y reinicia.")
+                print("⚠️ SALDO AGOTADO. Modifica SALDO_INICIAL en el código y reinicia.")
 
-            print("⏳ Escaneo finalizado. Esperando 5 minutos...")
+            print("⏳ Esperando 5 minutos...")
         except Exception as e:
             print(f"Error general: {e}")
         
@@ -250,6 +261,6 @@ if __name__ == "__main__":
     t.start()
     
     estado_ini = cargar_estado()
-    enviar_alerta(f"✅ *SIMULADOR INICIADO:* El bot operará automáticamente con dinero virtual.\n🏦 *Saldo Inicial:* ${estado_ini['saldo']:.2f}")
+    enviar_alerta(f"✅ *SIMULADOR ANTI-MARTINGALA ACTIVO:*\n🏦 *Saldo Inicial:* ${estado_ini['saldo']:.2f}\nEstrategia: Invertir $10.00 base + ganancias consecutivas.")
     
     ciclo_principal()
