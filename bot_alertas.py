@@ -5,6 +5,7 @@ import requests
 import pandas as pd
 import yfinance as yf
 from flask import Flask
+from datetime import datetime
 
 # ==========================================
 # CONFIGURACIÓN DE TELEGRAM
@@ -12,23 +13,23 @@ from flask import Flask
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-# Activos reales a vigilar (Yahoo Finance)
+# Activos reales a vigilar
 ACTIVOS = {
     "Bitcoin": "BTC-USD",
     "Euro / Dólar": "EURUSD=X",
     "Euro / Libra": "EURGBP=X",
-    "Dólar / Yen Japonés": "USDJPY=X",
+    "Dólar / Yen": "USDJPY=X",
     "Oro": "GC=F"
 }
 
 # ==========================================
-# SERVIDOR WEB (Para mantener vivo el bot en Render)
+# SERVIDOR WEB (Para mantener vivo en Render)
 # ==========================================
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🟢 Algoritmo Cuantitativo 4 Capas — Activo y vigilando el mercado global."
+    return "🟢 Algoritmo 4 Capas — Operando y registrando Logs internos."
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -39,15 +40,13 @@ def mantener_vivo():
 # ==========================================
 def enviar_alerta(mensaje):
     if not TOKEN or not CHAT_ID:
-        print("⚠️ Faltan credenciales de Telegram.")
         return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     datos = {"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         requests.post(url, data=datos, timeout=10)
-        print("Mensaje enviado a Telegram con éxito.")
     except Exception as e:
-        print(f"Error enviando alerta: {e}")
+        print(f"Error Telegram: {e}")
 
 # ==========================================
 # INDICADORES MATEMÁTICOS
@@ -56,7 +55,7 @@ def calcular_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0).rolling(window=period).mean()
     loss = -1 * delta.clip(upper=0).rolling(window=period).mean()
-    rs = gain / (loss + 1e-10) # Evitar división por cero
+    rs = gain / (loss + 1e-10)
     return 100 - (100 / (1 + rs))
 
 def calcular_estocastico(df, k_period=14, d_period=3):
@@ -74,13 +73,13 @@ def calcular_atr(df, period=14):
     return tr.rolling(window=period).mean()
 
 # ==========================================
-# EL MOTOR DEL ALGORITMO (4 CAPAS)
+# EL MOTOR DEL ALGORITMO
 # ==========================================
-def analizar_mercado(ticker):
+def analizar_mercado(nombre, ticker):
     try:
-        # Descargamos velas de 5 minutos
         df = yf.Ticker(ticker).history(period="5d", interval="5m")
         if df.empty or len(df) < 200:
+            print(f"[{nombre}] ⚠️ Datos insuficientes en Yahoo Finance.")
             return None
 
         # --- CÁLCULO DE VARIABLES ---
@@ -89,77 +88,73 @@ def analizar_mercado(ticker):
         df['RSI'] = calcular_rsi(df['Close'])
         df = calcular_estocastico(df)
         df['ATR'] = calcular_atr(df)
-        df['ATR_SMA'] = df['ATR'].rolling(window=14).mean() # Promedio de volatilidad
+        df['ATR_SMA'] = df['ATR'].rolling(window=14).mean()
         
-        # Bandas de Bollinger
         sma_20 = df['Close'].rolling(window=20).mean()
         std_20 = df['Close'].rolling(window=20).std()
         df['BB_Upper'] = sma_20 + (2 * std_20)
         df['BB_Lower'] = sma_20 - (2 * std_20)
 
-        # Tomamos los datos de la última vela cerrada
-        vela = df.iloc[-2] # Usamos -2 para asegurar que la vela esté 100% cerrada
-        
+        vela = df.iloc[-2]
         c = vela['Close']
         o = vela['Open']
         h = vela['High']
         l = vela['Low']
         
-        # Anatomía de la vela
         cuerpo = abs(c - o)
         mecha_sup = h - max(c, o)
         mecha_inf = min(c, o) - l
 
         # ==========================================
-        # EVALUACIÓN LÓGICA (COMPRAS)
+        # DIAGNÓSTICO INTERNO (LOGS EN RENDER)
         # ==========================================
-        # Capa 1: Tendencia Alcista
+        volatilidad_estado = "📈 ALTA (Ok)" if vela['ATR'] > vela['ATR_SMA'] else "📉 BAJA"
+        tendencia_estado = "ALCISTA" if c > vela['EMA_50'] else "BAJISTA"
+        print(f"[{nombre}] Precio: ${c:,.4f} | Tendencia: {tendencia_estado} | RSI: {vela['RSI']:.1f} | Volatilidad: {volatilidad_estado}")
+
+        # ==========================================
+        # EVALUACIÓN 4 CAPAS (COMPRA)
+        # ==========================================
         c1_compra = c > vela['EMA_50'] and vela['EMA_50'] > vela['EMA_200']
-        
-        # Capa 2: Momento Sobrevendido
         c2_compra = vela['RSI'] < 40 and vela['Stoch_K'] > vela['Stoch_D'] and vela['Stoch_K'] < 30
-        
-        # Capa 3: Volatilidad (Rebote en banda inferior con volumen)
         c3_compra = l <= vela['BB_Lower'] and vela['ATR'] > vela['ATR_SMA']
-        
-        # Capa 4: Gatillo (Pin Bar Alcista / Martillo)
         c4_compra = mecha_inf > (2 * cuerpo) and mecha_sup < cuerpo
 
         if c1_compra and c2_compra and c3_compra and c4_compra:
+            print(f"⭐⭐⭐ ¡SEÑAL DE COMPRA ENCONTRADA EN {nombre}! ⭐⭐⭐")
             return {"señal": "🟢 OPORTUNIDAD DE COMPRA (Sube)", "precio": c, "rsi": vela['RSI']}
 
         # ==========================================
-        # EVALUACIÓN LÓGICA (VENTAS)
+        # EVALUACIÓN 4 CAPAS (VENTA)
         # ==========================================
-        # Capa 1: Tendencia Bajista
         c1_venta = c < vela['EMA_50'] and vela['EMA_50'] < vela['EMA_200']
-        
-        # Capa 2: Momento Sobrecomprado
         c2_venta = vela['RSI'] > 60 and vela['Stoch_K'] < vela['Stoch_D'] and vela['Stoch_K'] > 70
-        
-        # Capa 3: Volatilidad (Rebote en banda superior con volumen)
         c3_venta = h >= vela['BB_Upper'] and vela['ATR'] > vela['ATR_SMA']
-        
-        # Capa 4: Gatillo (Pin Bar Bajista / Estrella fugaz)
         c4_venta = mecha_sup > (2 * cuerpo) and mecha_inf < cuerpo
 
         if c1_venta and c2_venta and c3_venta and c4_venta:
+            print(f"⭐⭐⭐ ¡SEÑAL DE VENTA ENCONTRADA EN {nombre}! ⭐⭐⭐")
             return {"señal": "🔴 OPORTUNIDAD DE VENTA (Baja)", "precio": c, "rsi": vela['RSI']}
 
-        return None # Si no se cumplen las 4 capas exactas, se queda en silencio
+        return None
 
     except Exception as e:
         print(f"Error analizando {ticker}: {e}")
         return None
 
 # ==========================================
-# CICLO PRINCIPAL (Cada 5 Minutos)
+# CICLO PRINCIPAL
 # ==========================================
 def ciclo_principal():
     while True:
         try:
+            ahora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            print("\n" + "="*50)
+            print(f"🔄 INICIANDO ESCANEO DE MERCADO - {ahora}")
+            print("="*50)
+
             for nombre, ticker in ACTIVOS.items():
-                resultado = analizar_mercado(ticker)
+                resultado = analizar_mercado(nombre, ticker)
                 
                 if resultado:
                     msj = (
@@ -168,25 +163,19 @@ def ciclo_principal():
                         f"📊 *Acción:* {resultado['señal']}\n"
                         f"💵 *Precio Cierre:* ${resultado['precio']:,.4f}\n"
                         f"📐 *RSI:* {resultado['rsi']:.1f}\n\n"
-                        f"⚠️ _Todas las condiciones matemáticas alineadas a 5 min._"
+                        f"⚠️ _Todas las condiciones alineadas a 5 min._"
                     )
                     enviar_alerta(msj)
-                    
+            
+            print("⏳ Escaneo finalizado. Esperando 5 minutos...")
         except Exception as e:
             print(f"Error en ciclo: {e}")
         
-        # Pausa de 300 segundos (5 minutos) antes del próximo escaneo global
         time.sleep(300)
 
-# ==========================================
-# EJECUCIÓN DEL SCRIPT
-# ==========================================
 if __name__ == "__main__":
     t = threading.Thread(target=mantener_vivo)
     t.daemon = True
     t.start()
-
-    time.sleep(2)
-    enviar_alerta("✅ *SISTEMA ACTIVO:* El algoritmo de 4 Capas Cuantitativas ha iniciado. Vigilando 5 activos globales cada 5 minutos. Recibirás un mensaje solo cuando se confirme una oportunidad clara.")
-    
+    enviar_alerta("✅ *SISTEMA ACTIVO:* Radar de 5 activos encendido. Logs internos funcionando.")
     ciclo_principal()
