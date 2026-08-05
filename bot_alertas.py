@@ -2,20 +2,10 @@ import os
 import time
 import threading
 import requests
-import json
 import pandas as pd
 import yfinance as yf
 from flask import Flask
 from datetime import datetime
-
-# ==========================================
-# CONFIGURACIÓN DEL SIMULADOR DE DINERO
-# ==========================================
-ARCHIVO_ESTADO = "simulador.json"
-SALDO_INICIAL = 58.20  # <--- Actualizado a tu saldo actual tras la victoria
-PAYOUT_BINOMO = 0.82  
-MONTO_FIJO = 10.0 
-ESTRATEGIA_ANTI_MARTINGALA = True # <--- Tu nueva regla: $10 + Ganancia anterior
 
 # ==========================================
 # CONFIGURACIÓN DE TELEGRAM Y ACTIVOS
@@ -23,19 +13,32 @@ ESTRATEGIA_ANTI_MARTINGALA = True # <--- Tu nueva regla: $10 + Ganancia anterior
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
+# Los "Pesos Pesados" inspirados en los flujos institucionales
 ACTIVOS = {
-    "Oro (XAUUSD)": "GC=F",
-    "Bitcoin": "BTC-USD",
-    "Euro / Dólar": "EURUSD=X",
-    "Dólar / Yen": "USDJPY=X",
-    "Euro / Libra": "EURGBP=X"
+    "ORO": "GC=F",
+    "BITCOIN": "BTC-USD",
+    "NETFLIX": "NFLX",
+    "AMAZON": "AMZN",
+    "EUR/USD": "EURUSD=X"
 }
 
+# ==========================================
+# SIMULADOR ANTI-MARTINGALA & RIESGO
+# ==========================================
+saldo_actual = 58.20
+saldo_maximo = 58.20  # Para calcular el peor momento (Drawdown)
+drawdown_maximo = 0.0
+inversion_base = 10.00
+racha_ganadora = 0
+
+# ==========================================
+# SERVIDOR WEB (Para Render)
+# ==========================================
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🟢 Motor Gann-Fibonacci + Simulador Anti-Martingala 24/7."
+    return "⚡ Terminal Financiera Pro - Fibo + RSI Activo"
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -52,215 +55,118 @@ def enviar_alerta(mensaje):
         print(f"Error Telegram: {e}")
 
 # ==========================================
-# GESTOR DE LA CUENTA Y RACHAS
+# MOTOR MATEMÁTICO: RSI + FIBONACCI
 # ==========================================
-def cargar_estado():
-    if os.path.exists(ARCHIVO_ESTADO):
-        try:
-            with open(ARCHIVO_ESTADO, 'r') as f:
-                data = json.load(f)
-                # Aseguramos que tenga la variable de racha si es un archivo viejo
-                if 'ultima_ganancia' not in data:
-                    data['ultima_ganancia'] = 0.0
-                return data
-        except:
-            pass
-    return {"saldo": SALDO_INICIAL, "pendientes": [], "ultima_ganancia": 0.0}
+def calcular_rsi(df, periodos=14):
+    """Calcula el RSI puro usando Pandas para medir el agotamiento"""
+    delta = df['Close'].diff()
+    ganancia = (delta.where(delta > 0, 0)).rolling(window=periodos).mean()
+    perdida = (-delta.where(delta < 0, 0)).rolling(window=periodos).mean()
+    
+    rs = ganancia / perdida
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
 
-def guardar_estado(estado):
-    with open(ARCHIVO_ESTADO, 'w') as f:
-        json.dump(estado, f)
-
-# ==========================================
-# EL MOTOR DEL ALGORITMO (GANN + FIBO)
-# ==========================================
-def analizar_mercado(nombre, ticker):
-    try:
-        df = yf.Ticker(ticker).history(period="2d", interval="5m")
-        if df.empty or len(df) < 60:
-            return None
-
-        ventana = df.tail(50)
-        maximo = ventana['High'].max()
-        minimo = ventana['Low'].min()
-        rango_total = maximo - minimo
-        
-        if rango_total == 0:
-            return None
-
-        idx_max = ventana['High'].idxmax()
-        idx_min = ventana['Low'].idxmin()
-
-        vela = df.iloc[-2]
-        c = vela['Close']
-        o = vela['Open']
-        h = vela['High']
-        l = vela['Low']
-        
-        cuerpo = abs(c - o)
-        mecha_sup = h - max(c, o)
-        mecha_inf = min(c, o) - l
-
-        zona_fibo_activa = False
-        tipo_operacion = ""
-        fibo_85 = 0
-        fibo_95 = 0
-
-        # COMPRAS
-        if idx_max > idx_min: 
-            fibo_85 = maximo - (rango_total * 0.85)
-            fibo_95 = maximo - (rango_total * 0.95)
-            if fibo_95 <= l <= fibo_85:
-                zona_fibo_activa = True
-                tipo_operacion = "🟢 COMPRA"
-                gatillo = mecha_inf > (1.5 * cuerpo)
-
-        # VENTAS
-        else:
-            fibo_85 = minimo + (rango_total * 0.85)
-            fibo_95 = minimo + (rango_total * 0.95)
-            if fibo_85 <= h <= fibo_95:
-                zona_fibo_activa = True
-                tipo_operacion = "🔴 VENTA"
-                gatillo = mecha_sup > (1.5 * cuerpo)
-
-        if zona_fibo_activa and gatillo:
-            return {
-                "señal": tipo_operacion, 
-                "precio": c, 
-                "fibo_85": fibo_85, 
-                "fibo_95": fibo_95
-            }
-
-        return None
-
-    except Exception as e:
-        return None
-
-# ==========================================
-# CICLO PRINCIPAL Y SIMULADOR
-# ==========================================
-def ciclo_principal():
+def analizar_mercado():
+    global saldo_actual, saldo_maximo, drawdown_maximo
+    
     while True:
         try:
-            estado = cargar_estado()
-            print("\n" + "="*50)
-            print(f"🔄 ESCANEANDO (SALDO: ${estado['saldo']:.2f} | RACHA: +${estado['ultima_ganancia']:.2f})")
-            print("="*50)
-            
-            # 1. EVALUAR OPERACIONES PENDIENTES
-            if estado['pendientes']:
-                nuevos_pendientes = []
-                for op in estado['pendientes']:
-                    try:
-                        df = yf.Ticker(op['ticker']).history(period="1d", interval="5m")
-                        if df.empty:
-                            nuevos_pendientes.append(op)
-                            continue
-                        
-                        precio_salida = df.iloc[-1]['Close'] 
-                        ganada = False
-                        empate = False
-                        
-                        if "COMPRA" in op['accion']:
-                            if precio_salida > op['precio_entrada']: ganada = True
-                            elif precio_salida == op['precio_entrada']: empate = True
-                        elif "VENTA" in op['accion']:
-                            if precio_salida < op['precio_entrada']: ganada = True
-                            elif precio_salida == op['precio_entrada']: empate = True
-                            
-                        # Actualizar Billetera y Memoria de Racha
-                        if ganada:
-                            ganancia_neta = op['inversion'] * PAYOUT_BINOMO
-                            estado['saldo'] += op['inversion'] + ganancia_neta
-                            
-                            # Tu regla: guardar la ganancia para la próxima jugada
-                            if ESTRATEGIA_ANTI_MARTINGALA:
-                                estado['ultima_ganancia'] = ganancia_neta
-                            else:
-                                estado['ultima_ganancia'] = 0.0
-                                
-                            res_txt = "✅ GANADA"
-                            racha_txt = f"📈 ¡Racha activa! Próxima inversión incluirá +${estado['ultima_ganancia']:.2f}"
-                            
-                        elif empate:
-                            estado['saldo'] += op['inversion'] 
-                            estado['ultima_ganancia'] = 0.0 # Se corta la racha
-                            res_txt = "➖ EMPATE (Reembolso)"
-                            racha_txt = "Reinicio a $10.00"
-                            
-                        else:
-                            estado['ultima_ganancia'] = 0.0 # Pierde la ganancia, vuelve a $10
-                            res_txt = "❌ PERDIDA"
-                            racha_txt = "Reinicio a $10.00"
-                            
-                        msj_sim = (
-                            f"🧾 *TICKET DE CIERRE (5 min)*\n\n"
-                            f"🌐 *Activo:* {op['nombre']}\n"
-                            f"⚖️ *Operación:* {op['accion']}\n"
-                            f"💵 *Entrada:* ${op['precio_entrada']:,.4f}\n"
-                            f"🏁 *Salida:* ${precio_salida:,.4f}\n"
-                            f"🎯 *Resultado:* {res_txt}\n\n"
-                            f"💰 *Inversión:* ${op['inversion']:.2f}\n"
-                            f"🏦 *NUEVO SALDO TOTAL: ${estado['saldo']:.2f}*\n"
-                            f"_{racha_txt}_"
-                        )
-                        enviar_alerta(msj_sim)
-                        
-                    except Exception as e:
-                        print(f"Error revisando pendiente: {e}")
-                        nuevos_pendientes.append(op)
+            for nombre, ticker in ACTIVOS.items():
+                # Descargamos los últimos 5 días en velas de 5 minutos
+                data = yf.download(ticker, period="5d", interval="5m", progress=False)
+                if data.empty or len(data) < 20:
+                    continue
                 
-                estado['pendientes'] = nuevos_pendientes
-                guardar_estado(estado)
-
-            # 2. ESCANEAR NUEVAS OPORTUNIDADES
-            if estado['saldo'] > 0:
-                for nombre, ticker in ACTIVOS.items():
-                    resultado = analizar_mercado(nombre, ticker)
+                # Inyectamos el RSI a la tabla de datos
+                data['RSI'] = calcular_rsi(data)
+                
+                # Extraemos los datos de la última vela cerrada
+                ultimo_cierre = data['Close'].iloc[-1]
+                maximo_reciente = data['High'].max()
+                minimo_reciente = data['Low'].min()
+                rsi_actual = data['RSI'].iloc[-1]
+                
+                # Filtro de seguridad (evitar errores de división si no hay movimiento)
+                rango = maximo_reciente - minimo_reciente
+                if rango == 0:
+                    continue
+                
+                # Calculamos en qué porcentaje de Fibonacci está el precio
+                fibo_posicion = ((ultimo_cierre - minimo_reciente) / rango) * 100
+                
+                # ===================================================
+                # LA CONFLUENCIA LOGICA "Y" (Precio + Agotamiento)
+                # ===================================================
+                senal = Ninguna
+                
+                # VENTA: Precio en el techo (Fibo > 95%) Y mercado sobrecomprado (RSI > 75)
+                if fibo_posicion >= 95 and rsi_actual >= 75:
+                    senal = "🔴 VENTA / SHORT"
+                    zona = "Techo Institucional"
                     
-                    if resultado:
-                        # Cálculo de Anti-Martingala: Base + Ganancia anterior
-                        inversion_calculada = MONTO_FIJO + estado.get('ultima_ganancia', 0.0)
-                        
-                        if inversion_calculada > estado['saldo']:
-                            inversion_calculada = estado['saldo']
-                                
-                        estado['saldo'] -= inversion_calculada
-                        estado['pendientes'].append({
-                            "nombre": nombre,
-                            "ticker": ticker,
-                            "accion": resultado['señal'],
-                            "precio_entrada": resultado['precio'],
-                            "inversion": inversion_calculada
-                        })
-                        guardar_estado(estado)
-                        
-                        msj = (
-                            f"🎯 *SEÑAL GANN/FIBO DETECTADA*\n\n"
-                            f"🌐 *Activo:* {nombre}\n"
-                            f"📊 *Acción:* {resultado['señal']}\n"
-                            f"💵 *Precio Actual:* ${resultado['precio']:,.4f}\n"
-                            f"📐 *Zona Fibo:* ${resultado['fibo_85']:,.4f} - ${resultado['fibo_95']:,.4f}\n\n"
-                            f"🤖 *SIMULADOR ANTI-MARTINGALA:*\n"
-                            f"Invirtiendo ${inversion_calculada:.2f} (Base + Racha). Saldo restante en caja: ${estado['saldo']:.2f}."
-                        )
-                        enviar_alerta(msj)
-            else:
-                print("⚠️ SALDO AGOTADO. Modifica SALDO_INICIAL en el código y reinicia.")
-
-            print("⏳ Esperando 5 minutos...")
+                # COMPRA: Precio en el piso (Fibo < 5%) Y mercado sobrevendido (RSI < 25)
+                elif fibo_posicion <= 5 and rsi_actual <= 25:
+                    senal = "🟢 COMPRA / LONG"
+                    zona = "Soporte Extremo"
+                
+                if senal:
+                    # Actualizar métricas de riesgo
+                    actualizar_drawdown()
+                    hora_texto = datetime.now().strftime("%I:%M %p")
+                    
+                    mensaje = (
+                        f"⚡ **ALERTA DE ALTA PRECISIÓN** ⚡\n\n"
+                        f"🌍 **Activo:** {nombre}\n"
+                        f"📊 **Operación:** {senal}\n"
+                        f"🎯 **Zona:** {zona}\n\n"
+                        f"📈 **Confirmaciones Matemáticas:**\n"
+                        f"• Fibonacci (Nivel): {fibo_posicion:.1f}%\n"
+                        f"• RSI (Agotamiento): {rsi_actual:.1f}\n\n"
+                        f"💰 **Gestión de Riesgo:**\n"
+                        f"• Saldo Actual: ${saldo_actual:.2f}\n"
+                        f"• Drawdown Máx: {drawdown_maximo:.2f}%\n"
+                        f"• Inversión Sugerida: ${inversion_base:.2f}"
+                    )
+                    enviar_alerta(mensaje)
+                    print(f"Alerta enviada para {nombre}")
+                    
+                    # Pausa de 30 minutos para este par y evitar spam en la misma zona
+                    time.sleep(1800) 
+            
+            # El bot respira 1 minuto antes de volver a escanear todo
+            time.sleep(60)
+            
         except Exception as e:
-            print(f"Error general: {e}")
-        
-        time.sleep(300)
+            print(f"Error analizando: {e}")
+            time.sleep(60)
 
+def actualizar_drawdown():
+    """Calcula el riesgo máximo al que ha estado expuesta la cuenta"""
+    global saldo_actual, saldo_maximo, drawdown_maximo
+    if saldo_actual > saldo_maximo:
+        saldo_maximo = saldo_actual
+    
+    caida_actual = ((saldo_maximo - saldo_actual) / saldo_maximo) * 100
+    if caida_actual > drawdown_maximo:
+        drawdown_maximo = caida_actual
+
+# ==========================================
+# EJECUCIÓN
+# ==========================================
 if __name__ == "__main__":
     t = threading.Thread(target=mantener_vivo)
     t.daemon = True
     t.start()
     
-    estado_ini = cargar_estado()
-    enviar_alerta(f"✅ *SIMULADOR ANTI-MARTINGALA ACTIVO:*\n🏦 *Saldo Inicial:* ${estado_ini['saldo']:.2f}\nEstrategia: Invertir $10.00 base + ganancias consecutivas.")
+    mensaje_inicio = (
+        "✅ **TERMINAL INSTITUCIONAL ACTUALIZADA**\n\n"
+        "Filtros activos:\n"
+        "• Fibonacci (Zonas Extremas)\n"
+        "• RSI (Agotamiento de Fuerza)\n\n"
+        f"💵 Saldo Inicial: ${saldo_actual:.2f}\n"
+        "Radar escaneando: Oro, Bitcoin, Netflix, Amazon y EUR/USD."
+    )
+    enviar_alerta(mensaje_inicio)
     
-    ciclo_principal()
+    analizar_mercado()
