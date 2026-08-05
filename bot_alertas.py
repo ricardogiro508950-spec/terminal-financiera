@@ -22,7 +22,7 @@ ACTIVOS = {
     "EUR/USD": "EURUSD=X"
 }
 
-# Diccionario de control de tiempos para evitar el bloqueo del hilo (1800 seg = 30 min)
+# Diccionario de control de tiempos para evitar spam (1800 seg = 30 min por activo)
 ultimas_alertas = {ticker: 0 for ticker in ACTIVOS.values()}
 
 # ==========================================
@@ -41,7 +41,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "⚡ Terminal Financiera Pro - Fibo + RSI Activo"
+    return "⚡ Terminal Institucional - Sistema Loaiza Activo"
 
 def mantener_vivo():
     port = int(os.environ.get('PORT', 10000))
@@ -58,7 +58,7 @@ def enviar_alerta(mensaje):
         print(f"Error Telegram: {e}")
 
 # ==========================================
-# MOTOR MATEMÁTICO: RSI + FIBONACCI
+# MOTOR MATEMÁTICO: RSI + FIBONACCI (NIVELES LOAIZA)
 # ==========================================
 def calcular_rsi(df, periodos=14):
     """Calcula el RSI puro con protección contra división por cero"""
@@ -66,16 +66,14 @@ def calcular_rsi(df, periodos=14):
     ganancia = (delta.where(delta > 0, 0)).rolling(window=periodos).mean()
     perdida = (-delta.where(delta < 0, 0)).rolling(window=periodos).mean()
     
-    # Reemplazar 0 con NaN para evitar division_by_zero, luego llenar los NaNs
     perdida = perdida.replace(0, np.nan)
     rs = ganancia / perdida
     rsi = 100 - (100 / (1 + rs))
-    return rsi.fillna(100)  # Si no hay pérdidas, el RSI es 100 de fuerza absoluta
+    return rsi.fillna(100)
 
 def simular_operacion():
     """Ejecuta la lógica del simulador Anti-Martingala sobre el saldo"""
     global saldo_actual, racha_ganadora
-    # Simulador estadístico de operaciones para activar las variables
     victoria = np.random.rand() > 0.45 
     
     if victoria:
@@ -102,7 +100,6 @@ def analizar_mercado():
     while True:
         try:
             for nombre, ticker in ACTIVOS.items():
-                # Validar el temporizador asíncrono por activo (Evita el bloqueo general)
                 if time.time() - ultimas_alertas[ticker] < 1800:
                     continue
 
@@ -110,13 +107,11 @@ def analizar_mercado():
                 if data.empty or len(data) < 20:
                     continue
                 
-                # Aplanar el MultiIndex de yfinance si existe
                 if isinstance(data.columns, pd.MultiIndex):
                     data.columns = data.columns.get_level_values(0)
                 
                 data['RSI'] = calcular_rsi(data)
                 
-                # Forzar conversión a flotante estándar
                 ultimo_cierre = float(data['Close'].iloc[-1])
                 maximo_reciente = float(data['High'].max())
                 minimo_reciente = float(data['Low'].min())
@@ -129,37 +124,49 @@ def analizar_mercado():
                 fibo_posicion = ((ultimo_cierre - minimo_reciente) / rango) * 100
                 
                 senal = None
-                zona = ""
+                tipo_alerta = ""
                 
-                # LOGICA DE CONFLUENCIA
+                # ===================================================
+                # LÓGICA DE NIVELES INSTITUCIONALES (85% y 95%)
+                # ===================================================
+                
+                # ZONA DE REVERSIÓN EXTREMA (Nivel 95% + RSI de Agotamiento)[span_2](start_span)[span_2](end_span)
                 if fibo_posicion >= 95 and rsi_actual >= 75:
-                    senal = "🔴 VENTA / SHORT"
-                    zona = "Techo Institucional"
+                    senal = "🔴 VENTA / SHORT (ZONA 95%)"
+                    tipo_alerta = "EJECUCIÓN INSTITUCIONAL"
                 elif fibo_posicion <= 5 and rsi_actual <= 25:
-                    senal = "🟢 COMPRA / LONG"
-                    zona = "Soporte Extremo"
+                    senal = "🟢 COMPRA / LONG (ZONA 5%)"
+                    tipo_alerta = "EJECUCIÓN INSTITUCIONAL"
+                
+                # ZONA DE INTERÉS TEMPRANA (Nivel 85% - Preparación)[span_3](start_span)[span_3](end_span)
+                elif 85 <= fibo_posicion < 95 and rsi_actual >= 70:
+                    senal = "⚠️ ALERTA TEMPRANA: Posible Venta"
+                    tipo_alerta = "ZONA DE INTERÉS (85%)"
+                elif 5 < fibo_posicion <= 15 and rsi_actual <= 30:
+                    senal = "⚠️ ALERTA TEMPRANA: Posible Compra"
+                    tipo_alerta = "ZONA DE INTERÉS (15%)"
                 
                 if senal:
-                    simular_operacion()
-                    actualizar_drawdown()
+                    # Si es ejecución final, simulamos operación y riesgo
+                    if "EJECUCIÓN" in tipo_alerta:
+                        simular_operacion()
+                        actualizar_drawdown()
                     
                     mensaje = (
-                        f"⚡ **ALERTA DE ALTA PRECISIÓN** ⚡\n\n"
+                        f"⚡ **{tipo_alerta}** ⚡\n\n"
                         f"🌍 **Activo:** {nombre}\n"
-                        f"📊 **Operación:** {senal}\n"
-                        f"🎯 **Zona:** {zona}\n\n"
-                        f"📈 **Confirmaciones Matemáticas:**\n"
+                        f"📊 **Señal:** {senal}\n\n"
+                        f"📈 **Métricas de Confluencia:**\n"
                         f"• Fibonacci (Nivel): {fibo_posicion:.1f}%\n"
                         f"• RSI (Agotamiento): {rsi_actual:.1f}\n\n"
                         f"💰 **Gestión de Riesgo:**\n"
                         f"• Saldo Actual: ${saldo_actual:.2f}\n"
                         f"• Drawdown Máx: {drawdown_maximo:.2f}%\n"
-                        f"• Inversión Aplicada: ${inversion_base:.2f}\n"
-                        f"• Racha Actual: {racha_ganadora} seguidas"
+                        f"• Inversión Aplicada: ${inversion_base:.2f}"
                     )
                     enviar_alerta(mensaje)
                     
-                    # Registrar el timestamp de la alerta para este activo específico
+                    # Registrar timestamp para cooldown de este activo
                     ultimas_alertas[ticker] = time.time()
             
             time.sleep(60)
@@ -177,11 +184,11 @@ if __name__ == "__main__":
     t.start()
     
     mensaje_inicio = (
-        "✅ **TERMINAL INSTITUCIONAL ACTUALIZADA Y DEPURADA**\n\n"
-        "Mejoras de rendimiento aplicadas:\n"
-        "• Procesamiento asíncrono de activos integrado.\n"
-        "• Sanitización MultiIndex (yfinance) operativa.\n"
-        "• Motor Anti-Martingala enlazado.\n\n"
+        "✅ **TERMINAL INSTITUCIONAL - SISTEMA LOAIZA**\n\n"
+        "Niveles de control integrados:\n"
+        "• Zona de Interés Temprana (85% / 15%)\n"
+        "• Zona de Reversión Extrema (95% / 5%)\n"
+        "• Filtro RSI de Agotamiento\n\n"
         f"💵 Saldo Inicial: ${saldo_actual:.2f}\n"
         "Radar escaneando: Oro, Bitcoin, Netflix, Amazon y EUR/USD."
     )
