@@ -1,36 +1,21 @@
 import os
 import time
-import threading
 import requests
-import random
-from flask import Flask
-from datetime import datetime, timedelta
+import pandas as pd
+import yfinance as yf
+from datetime import datetime
 
 # ==========================================
-# CONFIGURACIÓN DE TELEGRAM
+# CONFIGURACIÓN (TUS CREDENCIALES)
 # ==========================================
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-# Los pares clásicos que usan en Opciones Binarias
-PARES = ["EUR/USD", "EUR/JPY", "GBP/USD", "USD/JPY"]
-
-# ==========================================
-# SERVIDOR WEB (Para Render)
-# ==========================================
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "🤡 Generador de Señales (Modo TikTok) - Activo"
-
-def mantener_vivo():
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+# Usamos un activo real muy líquido en Binomo
+ACTIVO = "EURUSD=X" 
 
 def enviar_alerta(mensaje):
-    if not TOKEN or not CHAT_ID:
-        return
+    if not TOKEN or not CHAT_ID: return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     datos = {"chat_id": CHAT_ID, "text": mensaje}
     try:
@@ -38,67 +23,105 @@ def enviar_alerta(mensaje):
     except Exception as e:
         print(f"Error Telegram: {e}")
 
-# ==========================================
-# EL "CEREBRO" DEL SOFTWARE (Probabilidad Ciega)
-# ==========================================
-def generar_senal_probabilistica():
-    # 1. Elige un par al azar
-    par_elegido = random.choice(PARES)
+def calcular_indicadores(df):
+    """Inyecta RSI, EMAs y MACD para la estrategia de 5 min"""
+    # RSI (14 periodos)
+    delta = df['Close'].diff()
+    ganancia = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    perdida = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = ganancia / perdida.replace(0, pd.NA)
+    df['RSI'] = 100 - (100 / (1 + rs))
     
-    # 2. Genera una probabilidad (50/50 o ajustada al 60% para simular "estrategia")
-    probabilidad = random.random()
+    # EMAs (9 y 21)
+    df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
+    df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
     
-    if probabilidad > 0.5:
-        accion = "COMPRAR / BUY"
-        icono = "🟢"
-    else:
-        accion = "VENDER / SELL"
-        icono = "🔴"
-        
-    return par_elegido, accion, icono
+    # MACD 
+    ema_12 = df['Close'].ewm(span=12, adjust=False).mean()
+    ema_26 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = ema_12 - ema_26
+    df['Senal_MACD'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    df['Histograma'] = df['MACD'] - df['Senal_MACD']
+    
+    return df
 
-# ==========================================
-# CICLO PRINCIPAL (El reloj suizo de 3 minutos)
-# ==========================================
-def ciclo_vendehumos():
+def esperar_cierre_vela():
+    """Sincronizador: Espera hasta el segundo 58 del minuto actual"""
+    ahora = datetime.now()
+    segundos_restantes = 58 - ahora.second
+    if segundos_restantes < 0:
+        segundos_restantes = 60 + segundos_restantes
+    time.sleep(segundos_restantes)
+
+def motor_binomo():
+    print(f"🤖 Motor Binomo Sincronizado. Analizando {ACTIVO} en velas de 1m...")
+    ultima_alerta = None
+    
     while True:
         try:
-            # Obtiene la hora actual para el mensaje
-            ahora = datetime.now()
-            hora_texto = ahora.strftime("%I:%M %p")
+            # 1. El bot se pausa solo y despierta en el segundo 58 de la vela
+            esperar_cierre_vela()
             
-            # Genera la señal inventada
-            par, accion, icono = generar_senal_probabilistica()
+            # 2. Descarga la data de la vela que está a 2 segundos de cerrar
+            data = yf.download(ACTIVO, period="1d", interval="1m", progress=False)
             
-            # Construye el mensaje con el formato exacto del TikTok
-            mensaje = (
-                f"⚙️ SOFTWARE PREMIUM ⚙️\n\n"
-                f"{par} {hora_texto}\n"
-                f"{icono} {accion}\n\n"
-                f"⏳ Expiración: 3 a 5 minutos."
-            )
+            if data.empty or len(data) < 30:
+                time.sleep(2)
+                continue
+                
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+                
+            data = calcular_indicadores(data)
             
-            # Envía a Telegram
-            enviar_alerta(mensaje)
-            print(f"Señal falsa enviada: {par} - {accion}")
+            # 3. Lectura de variables técnicas
+            ema9 = float(data['EMA_9'].iloc[-1])
+            ema21 = float(data['EMA_21'].iloc[-1])
+            rsi = float(data['RSI'].iloc[-1])
+            hist_actual = float(data['Histograma'].iloc[-1])
+            hist_previo = float(data['Histograma'].iloc[-2])
             
-            # EL TRUCO: Se duerme exactamente 180 segundos (3 minutos)
-            # Sin importar qué esté haciendo el mercado real.
-            time.sleep(180) 
+            senal = None
+            
+            # ==========================================
+            # FILTRO DE CONFLUENCIA DE IMPULSO
+            # ==========================================
+            # COMPRA: Tendencia alcista + MACD creciendo + RSI sano (no sobrecomprado)
+            if (ema9 > ema21) and (hist_actual > 0 and hist_actual > hist_previo) and (50 < rsi < 70):
+                senal = "🟢 COMPRAR | SUBE"
+                
+            # VENTA: Tendencia bajista + MACD cayendo + RSI sano (no sobrevendido)
+            elif (ema9 < ema21) and (hist_actual < 0 and hist_actual < hist_previo) and (30 < rsi < 50):
+                senal = "🔴 VENDER | BAJA"
+            
+            hora_alerta = datetime.now().strftime("%H:%M")
+            
+            # 4. Disparo inmediato para entrar en Binomo
+            if senal and hora_alerta != ultima_alerta:
+                mensaje = (
+                    f"⚡ **EJECUCIÓN BINOMO** ⚡\n\n"
+                    f"🌍 **Activo:** EUR/USD (Mercado Real)\n"
+                    f"🎯 **Acción:** {senal}\n"
+                    f"⏱ **Reloj:** Poner a 5 Minutos\n\n"
+                    f"⚙️ **Confirmación Interna:**\n"
+                    f"• Momentum MACD: A favor\n"
+                    f"• RSI: {rsi:.1f}\n\n"
+                    f"⚠️ *Entrar exactamente al iniciar la siguiente vela.*"
+                )
+                enviar_alerta(mensaje)
+                print(f"[{hora_alerta}] Señal Binomo: {senal}")
+                ultima_alerta = hora_alerta
+                
+                # Bloqueo de 5 minutos mientras dura tu operación en Binomo
+                time.sleep(300)
+            
+            # Si no hubo señal, espera 2 segundos para llegar al segundo 00 y reiniciar ciclo
+            time.sleep(2)
             
         except Exception as e:
-            print(f"Error: {e}")
-            time.sleep(60)
+            print(f"Error analizando: {e}")
+            time.sleep(5)
 
-# ==========================================
-# EJECUCIÓN
-# ==========================================
 if __name__ == "__main__":
-    t = threading.Thread(target=mantener_vivo)
-    t.daemon = True
-    t.start()
-    
-    enviar_alerta("✅ *SOFTWARE INICIADO:* Recibirás una señal probabilística cada 3 minutos exactos, ignorando la acción del precio real.")
-    
-    # Inicia el bucle infinito
-    ciclo_vendehumos()
+    enviar_alerta("✅ Motor Algorítmico para BINOMO activado. Sincronizando reloj de servidor...")
+    motor_binomo()
